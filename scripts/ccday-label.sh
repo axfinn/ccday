@@ -29,7 +29,7 @@ QWEATHER_API_HOST="${QWEATHER_API_HOST:-}"
 QWEATHER_KID="${QWEATHER_KID:-}"
 QWEATHER_PROJECT_ID="${QWEATHER_PROJECT_ID:-}"
 QWEATHER_PRIVATE_KEY="${QWEATHER_PRIVATE_KEY:-$HOME/.ccday-private.pem}"
-QWEATHER_LOCATION="${QWEATHER_LOCATION:-116.38,39.91}"
+QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"  # 默认上海
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -194,6 +194,24 @@ except Exception:
 print(" │ ".join(parts))
 PYEOF
 )
+
+# ── Billing（bilibili 内网）────────────────────────────
+TOKEN="${ANTHROPIC_AUTH_TOKEN:-}"
+if [ -n "$TOKEN" ]; then
+    BILLING=$(curl -s --max-time 3 "http://api-ai-coding.bilibili.co/api/v1/billing/usage" \
+      -H "Authorization: Bearer $TOKEN" 2>/dev/null | /usr/bin/python3 -c '
+import sys,json
+try:
+    d=json.load(sys.stdin).get("data",{})
+    u=d.get("daily_usage",0)
+    l=d.get("daily_limit",0)
+    p=d.get("daily_percent",0)
+    b=d.get("balance",0)
+    print(f"💰${u:.1f}/${l:.0f}({p:.0f}%) 余${b:.1f}")
+except: pass
+' 2>/dev/null)
+    [ -n "$BILLING" ] && LINE="${LINE} │ ${BILLING}"
+fi
 
 [ -z "$LINE" ] && exit 0
 
