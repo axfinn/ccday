@@ -94,48 +94,47 @@ def fetch_weather_api():
     except Exception:
         return None
 
-def fetch_weather_mac():
-    """macOS 系统天气（WeatherKit via weatherd plist）"""
+def fetch_weather_openmeteo(loc):
+    """open-meteo.com — 免费无需 key，按经纬度"""
     try:
-        import subprocess, plistlib
-        # 读 WeatherKit 缓存 plist
-        result = subprocess.run(
-            ["defaults", "read", "com.apple.weather", "WeatherCurrentConditions"],
-            capture_output=True, text=True, timeout=3
-        )
-        if result.returncode != 0:
+        # loc 格式: "lat,lng" 或 城市ID（城市ID无法用，跳过）
+        if "," not in loc:
             return None
-        # 尝试解析 JSON 格式
-        data = json.loads(result.stdout)
-        temp = round(data.get("temperature", {}).get("value", 0))
-        cond_code = data.get("conditionCode", "")
-        cond_map = {
-            "Clear":"☀️ 晴","MostlyClear":"🌤 晴","PartlyCloudy":"⛅ 多云",
-            "MostlyCloudy":"☁️ 多云","Cloudy":"☁️ 阴","Drizzle":"🌦 小雨",
-            "Rain":"🌧 雨","HeavyRain":"⛈ 大雨","Thunderstorm":"⛈ 雷雨",
-            "Snow":"🌨 雪","Sleet":"🌨 雨夹雪","Fog":"🌫 雾","Haze":"😷 霾",
-            "Windy":"💨 大风","Breezy":"🌬 微风",
-        }
-        desc = cond_map.get(cond_code, f"🌡{cond_code}")
+        lat, lng = loc.split(",", 1)
+        url = (f"https://api.open-meteo.com/v1/forecast"
+               f"?latitude={lat.strip()}&longitude={lng.strip()}"
+               f"&current=temperature_2m,weathercode&timezone=auto")
+        req = urllib.request.Request(url, headers={"User-Agent": "ccday/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+        cur = data.get("current", {})
+        temp = round(cur.get("temperature_2m", 0))
+        code = cur.get("weathercode", 0)
+        # WMO weather code → emoji + 描述
+        if code == 0:                      desc = "☀️ 晴"
+        elif code <= 2:                    desc = "⛅ 多云"
+        elif code == 3:                    desc = "☁️ 阴"
+        elif code in (45, 48):             desc = "🌫 雾"
+        elif code in (51,53,55,56,57):     desc = "🌦 小雨"
+        elif code in (61,63):              desc = "🌧 雨"
+        elif code in (65,66,67):           desc = "⛈ 大雨"
+        elif code in (71,73,75,77):        desc = "🌨 雪"
+        elif code in (80,81,82):           desc = "🌧 阵雨"
+        elif code in (85,86):              desc = "🌨 阵雪"
+        elif code in (95,96,99):           desc = "⛈ 雷雨"
+        else:                              desc = "🌡 未知"
         return f"{desc}{temp}°"
-    except Exception:
-        pass
-    try:
-        # 备用：wttr.in 本地查询
-        req = urllib.request.Request(
-            "https://wttr.in/?format=%t+%C&lang=zh",
-            headers={"User-Agent": "curl/7.81.0"}
-        )
-        with urllib.request.urlopen(req, timeout=4) as r:
-            text = r.read().decode().strip()
-        return f"🌡{text}"
     except Exception:
         return None
 
+def fetch_weather_mac():
+    """macOS 天气：优先 open-meteo，无需任何配置"""
+    return fetch_weather_openmeteo(location)
+
 is_mac = platform.system() == "Darwin"
 weather_text = fetch_weather_mac() if is_mac else fetch_weather_api()
-if not weather_text and not is_mac:
-    weather_text = fetch_weather_api()
+if not weather_text:
+    weather_text = fetch_weather_openmeteo(location)
 
 if weather_text:
     parts.append(weather_text)
