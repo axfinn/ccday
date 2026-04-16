@@ -15,8 +15,10 @@ echo "📦 安装 ccday..."
 # 1. 复制脚本
 mkdir -p "$INSTALL_DIR"
 cp "$SCRIPT_DIR/scripts/ccday-label.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scripts/ccday-joke-gen.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/holidays.json" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/ccday-label.sh"
+chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
 echo "✅ 脚本已安装到 $INSTALL_DIR"
 
 # 2. 安装 skill
@@ -36,6 +38,20 @@ if [ ! -f "$HOME/.ccday.conf" ]; then
 # QWEATHER_PROJECT_ID=你的项目ID
 # QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
 QWEATHER_LOCATION=116.38,39.91
+
+# 出发地（用于计算旅行距离，默认北京）
+HOME_LAT=39.91
+HOME_LNG=116.38
+
+# 旅行计划（可选）
+# TRIP_NAME=目的地名称
+# TRIP_LAT=目的地纬度
+# TRIP_LNG=目的地经度
+# TRIP_DATE=2026-05-01
+# TRIP_TIPS="带防晒霜;穿舒适的鞋;早点出发"
+
+# AI 段子（每天一次，会话结束自动生成）
+CCDAY_AI_JOKE=1
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -48,43 +64,82 @@ QWEATHER_KID=
 QWEATHER_PROJECT_ID=
 QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
 QWEATHER_LOCATION=116.38,39.91
+
+# 出发地（用于计算旅行距离，默认北京）
+HOME_LAT=39.91
+HOME_LNG=116.38
+
+# 旅行计划（可选）
+# TRIP_NAME=目的地名称
+# TRIP_LAT=目的地纬度
+# TRIP_LNG=目的地经度
+# TRIP_DATE=2026-05-01
+# TRIP_TIPS="带防晒霜;穿舒适的鞋;早点出发"
+
+# AI 段子（每天一次，会话结束自动生成）
+CCDAY_AI_JOKE=1
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi
 else
-    echo "ℹ️  配置文件已存在: ~/.ccday.conf"
+    echo "ℹ️  配置文件已存在: ~/.ccday.conf（跳过，不覆盖）"
 fi
 
 # 4. 注入 statusLine 到 claude settings.json
 if [ ! -f "$CLAUDE_SETTINGS" ]; then
     echo "⚠️  未找到 $CLAUDE_SETTINGS，请手动配置 statusLine（见 README）"
-    exit 0
-fi
-
-if python3 -c "import json; d=json.load(open('$CLAUDE_SETTINGS')); exit(0 if 'statusLine' in d else 1)" 2>/dev/null; then
-    echo "ℹ️  settings.json 已有 statusLine，跳过"
 else
     python3 - "$CLAUDE_SETTINGS" "$INSTALL_DIR/ccday-label.sh" <<'PYEOF'
 import json, sys
-settings_path = sys.argv[1]
-script_path = sys.argv[2]
+settings_path, script_path = sys.argv[1], sys.argv[2]
 
 with open(settings_path) as f:
     cfg = json.load(f)
 
-hud_cmd = (
-    f"bash -c '{script_path} 2>/dev/null; "
-    "plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/claude-hud/claude-hud/*/ 2>/dev/null "
-    "| awk -F/ \'{ print $(NF-1) \"\\t\" $0 }\' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); "
-    "[ -n \"$plugin_dir\" ] && exec bun --env-file /dev/null \"${plugin_dir}src/index.ts\"'"
+if "statusLine" in cfg:
+    print("ℹ️  settings.json 已有 statusLine，跳过")
+else:
+    cfg["statusLine"] = {
+        "padding": 0,
+        "command": f"bash {script_path}",
+        "type": "command"
+    }
+    with open(settings_path, "w") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    print(f"✅ statusLine 已写入 {settings_path}")
+PYEOF
+fi
+
+# 5. 注入 Stop hook 到 claude settings.json
+if [ -f "$CLAUDE_SETTINGS" ]; then
+    python3 - "$CLAUDE_SETTINGS" "$INSTALL_DIR/ccday-joke-gen.sh" <<'PYEOF'
+import json, sys
+settings_path, gen_script = sys.argv[1], sys.argv[2]
+
+with open(settings_path) as f:
+    cfg = json.load(f)
+
+hook_cmd = f"bash {gen_script}"
+hooks = cfg.setdefault("hooks", {})
+stop_hooks = hooks.setdefault("Stop", [])
+
+# 检查是否已存在
+already = any(
+    h.get("command") == hook_cmd
+    for entry in stop_hooks
+    for h in entry.get("hooks", [])
 )
 
-cfg["statusLine"] = {"padding": 0, "command": hud_cmd, "type": "command"}
-
-with open(settings_path, 'w') as f:
-    json.dump(cfg, f, ensure_ascii=False, indent=2)
-
-print(f"✅ statusLine 已写入 {settings_path}")
+if already:
+    print("ℹ️  Stop hook 已存在，跳过")
+else:
+    stop_hooks.append({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": hook_cmd}]
+    })
+    with open(settings_path, "w") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    print(f"✅ Stop hook 已写入 {settings_path}")
 PYEOF
 fi
 
@@ -95,8 +150,13 @@ if $IS_MAC; then
     echo "macOS 用户直接重启 Claude Code 即可，系统天气自动生效。"
 else
     echo "下一步："
-    echo "  1. 在 Claude Code 中输入 /ccday 按向导申请和风天气 API"
+    echo "  1. 编辑 ~/.ccday.conf，填入和风天气 API 配置"
     echo "  2. 重启 Claude Code"
+    echo ""
+    echo "  申请免费 API: https://console.qweather.com"
+    echo "  详细教程: 在 Claude Code 中输入 /ccday"
 fi
 echo ""
-echo "状态栏效果: 🌧14°小雨 │ 🔨劳动节还有15天 │ 🏖周末还有2天 │ 🌊 厦门鼓浪屿..."
+echo "状态栏效果:"
+echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🤖 让AI写段子，我摸鱼！"
+echo "  📊 ctx 53%  │  🗺️ 目的地 22km·2天后  │  💰72%"
