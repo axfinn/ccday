@@ -96,12 +96,25 @@ settings_path, script_path = sys.argv[1], sys.argv[2]
 with open(settings_path) as f:
     cfg = json.load(f)
 
+import os
+home = os.path.expanduser("~")
+# 用 $HOME 变量而不是硬编码路径，跨用户可用
+cmd = "bash $HOME/.claude/scripts/ccday/ccday-label.sh"
+
 if "statusLine" in cfg:
-    print("ℹ️  settings.json 已有 statusLine，跳过")
+    # 如果已有但路径是旧的硬编码路径，也更新
+    existing = cfg["statusLine"].get("command", "")
+    if "ccday-label.sh" in existing and existing != cmd:
+        cfg["statusLine"]["command"] = cmd
+        with open(settings_path, "w") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        print(f"✅ statusLine 路径已更新为 $HOME 变量形式")
+    else:
+        print("ℹ️  settings.json 已有 statusLine，跳过")
 else:
     cfg["statusLine"] = {
         "padding": 0,
-        "command": f"bash {script_path}",
+        "command": cmd,
         "type": "command"
     }
     with open(settings_path, "w") as f:
@@ -119,13 +132,13 @@ settings_path, gen_script = sys.argv[1], sys.argv[2]
 with open(settings_path) as f:
     cfg = json.load(f)
 
-hook_cmd = f"bash {gen_script}"
+hook_cmd = "bash $HOME/.claude/scripts/ccday/ccday-joke-gen.sh"
 hooks = cfg.setdefault("hooks", {})
 stop_hooks = hooks.setdefault("Stop", [])
 
-# 检查是否已存在
+# 检查是否已存在（匹配 ccday-joke-gen.sh 即可，不管路径形式）
 already = any(
-    h.get("command") == hook_cmd
+    "ccday-joke-gen.sh" in h.get("command", "")
     for entry in stop_hooks
     for h in entry.get("hooks", [])
 )

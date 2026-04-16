@@ -13,7 +13,6 @@
 #   QWEATHER_PRIVATE_KEY 私钥路径（默认 ~/.ccday-private.pem）
 #   QWEATHER_LOCATION   经纬度或城市ID（默认 116.38,39.91）
 
-CLAUDE_HUD_CONFIG="$HOME/.claude/plugins/claude-hud/config.json"
 HOLIDAYS_JSON="$(dirname "$0")/holidays.json"
 
 # 加载配置：优先 .ccday.conf，其次 .ccday.env，最后 .ccday.yaml
@@ -371,15 +370,3 @@ print(f'📊 ctx {pct}%')
 # 输出到 stdout（供 statusLine type:command 直接显示）
 echo "$LINE"
 [ -n "${LINE2:-}" ] && echo "$LINE2"
-
-/usr/bin/python3 -c "
-import json, sys, os
-p = sys.argv[1]
-os.makedirs(os.path.dirname(p), exist_ok=True)
-try:
-    with open(p) as f: cfg = json.load(f)
-except Exception: cfg = {}
-if not isinstance(cfg.get('display'), dict): cfg['display'] = {}
-cfg['display']['customLine'] = sys.argv[2]
-with open(p, 'w') as f: json.dump(cfg, f, ensure_ascii=False, indent=2)
-" "$CLAUDE_HUD_CONFIG" "$LINE"
