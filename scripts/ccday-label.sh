@@ -267,6 +267,42 @@ fi
 
 [ -z "$LINE" ] && exit 0
 
+# ── 上下文占用 ────────────────────────────────────────
+CTX=$(python3 -c "
+import json, os, glob, time
+
+proj_dir = os.path.expanduser('~/.claude/projects')
+files = glob.glob(f'{proj_dir}/**/*.jsonl', recursive=True)
+if not files:
+    exit()
+
+# 取5分钟内修改的文件，没有则取最近的
+now = time.time()
+recent = [f for f in files if now - os.path.getmtime(f) < 300]
+candidates = recent if recent else files
+latest = max(candidates, key=os.path.getmtime)
+
+usage = None
+with open(latest) as f:
+    for line in f:
+        try:
+            d = json.loads(line)
+            u = d.get('message', {}).get('usage')
+            if u and u.get('input_tokens'):
+                usage = u
+        except: pass
+
+if not usage:
+    exit()
+
+total = (usage.get('input_tokens', 0)
+       + usage.get('cache_read_input_tokens', 0)
+       + usage.get('cache_creation_input_tokens', 0))
+pct = round(total / 200000 * 100)
+print(f'📊 ctx {pct}%')
+" 2>/dev/null)
+[ -n "$CTX" ] && LINE2="${CTX}${LINE2:+ │ ${LINE2}}"
+
 # 输出到 stdout（供 statusLine type:command 直接显示）
 echo "$LINE"
 [ -n "${LINE2:-}" ] && echo "$LINE2"
