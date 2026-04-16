@@ -242,7 +242,7 @@ if days_left or not tdate:
 " "$TRIP_NAME" "$TRIP_LAT" "$TRIP_LNG" \
   "${HOME_LAT:-31.28}" "${HOME_LNG:-121.52}" \
   "${TRIP_DATE:-}" "${TRIP_TIPS:-}" 2>/dev/null)
-    [ -n "$TRIP" ] && LINE="${LINE} │ ${TRIP}"
+    [ -n "$TRIP" ] && LINE2="${TRIP}"
 fi
 
 # ── Billing（bilibili 内网）────────────────────────────
@@ -260,13 +260,16 @@ try:
     print(f"💰{p:.0f}%")
 except: pass
 ' 2>/dev/null)
-    [ -n "$BILLING" ] && LINE="${LINE} │ ${BILLING}"
+    if [ -n "$BILLING" ]; then
+        LINE2="${LINE2:+${LINE2} │ }${BILLING}"
+    fi
 fi
 
 [ -z "$LINE" ] && exit 0
 
 # 输出到 stdout（供 statusLine type:command 直接显示）
 echo "$LINE"
+[ -n "${LINE2:-}" ] && echo "$LINE2"
 
 /usr/bin/python3 -c "
 import json, sys, os
