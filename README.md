@@ -5,102 +5,124 @@
 在 Claude Code 底部状态栏（claude-hud）实时显示：
 
 ```
-☀️25°/15°晴 │ 🔨劳动节还有15天 │ 🏖周末还有2天 │ 🌸张家界四月云海最美，赶在五一前去
+🌧14°小雨 │ 🔨劳动节还有15天 │ 🏖周末还有2天 │ 🌊 厦门鼓浪屿避开周末，工作日人少体验翻倍
 ```
 
-## 功能
+- **macOS** — 直接读取系统天气，无需配置
+- **Linux/其他** — 调用和风天气 API（免费，需注册）
 
-- **天气** — 和风天气 API，显示今日气温和天气状况
-- **节假日倒计时** — 中国法定节假日 + 国际节日，自动找下一个
-- **周末倒计时** — 距离周六还有几天
-- **出行灵感** — 每天一条当季旅行 tips，基于日期固定（不随机跳变）
+---
 
-## 安装
+## 快速开始
 
-### 前置条件
-
-- Claude Code（已安装 claude-hud 插件）
-- Python 3（系统自带）
-- 和风天气免费 API Key（[注册地址](https://dev.qweather.com)，免费额度 1000次/天）
-
-### 一键安装
+### 1. 克隆项目
 
 ```bash
-git clone git@github.com:axfinn/ccday.git
+git clone https://github.com/axfinn/ccday.git
 cd ccday
 bash install.sh
 ```
 
-### 配置
+### 2. 配置天气（Linux 用户）
 
-编辑 `~/.ccday.conf`：
-
-```bash
-# 和风天气 API Key
-QWEATHER_KEY=your_key_here
-
-# 城市 ID（默认北京）
-# 北京=101010100  上海=101020100  广州=101280101  深圳=101280601
-# 查询更多城市: https://github.com/qwd/LocationList
-QWEATHER_LOCATION=101010100
-```
-
-重启 Claude Code 即可看到效果。
-
-## 手动配置 statusLine
-
-如果 `install.sh` 检测到已有 `statusLine` 配置，需手动合并。在 `~/.claude/settings.json` 的 `statusLine.command` 开头加入：
-
-```json
-{
-  "statusLine": {
-    "padding": 0,
-    "command": "bash -c '$HOME/.claude/scripts/ccday/ccday-label.sh 2>/dev/null; <原有命令>'",
-    "type": "command"
-  }
-}
-```
-
-## 自定义颜色
-
-编辑 `~/.claude/plugins/claude-hud/config.json`：
-
-```json
-{
-  "colors": {
-    "custom": "cyan"
-  }
-}
-```
-
-支持颜色名（`green`/`cyan`/`yellow`）、256色索引（`208`）、hex（`"#FF6600"`）。
-
-## 节假日数据
-
-内置 `scripts/holidays.json`，覆盖 2025–2027 年：
-
-| 类型 | 节日 |
-|------|------|
-| 中国法定 | 元旦、春节、清明、劳动节、端午、中秋、国庆 |
-| 中国传统 | 除夕、七夕 |
-| 国际节日 | 情人节、母亲节、父亲节、万圣节、圣诞节 |
-
-## 卸载
+编辑 `~/.ccday.conf`，填入和风天气凭据：
 
 ```bash
-bash uninstall.sh
+QWEATHER_API_HOST=xxxxxx.re.qweatherapi.com
+QWEATHER_KID=你的凭据ID
+QWEATHER_PROJECT_ID=你的项目ID
+QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
+QWEATHER_LOCATION=116.38,39.91   # 经纬度，或城市ID如 101010100
 ```
+
+### 3. 重启 Claude Code
+
+状态栏自动显示天气和倒计时。
+
+---
+
+## 申请和风天气 API（免费）
+
+> macOS 用户跳过此步骤，系统天气自动生效。
+
+### 第一步：注册账号
+
+前往 [https://id.qweather.com/register](https://id.qweather.com/register) 注册，免费额度 **1000次/天**，够个人使用。
+
+### 第二步：创建项目
+
+1. 登录 [控制台](https://console.qweather.com)
+2. 左侧菜单 → **项目管理** → 新建项目
+3. 记下 **项目ID**（格式如 `3K85Y9JGHF`）
+
+### 第三步：生成 Ed25519 密钥对
+
+```bash
+openssl genpkey -algorithm ED25519 -out ~/.ccday-private.pem \
+  && openssl pkey -pubout -in ~/.ccday-private.pem -out /tmp/ccday-public.pem \
+  && chmod 600 ~/.ccday-private.pem \
+  && cat /tmp/ccday-public.pem
+```
+
+输出的公钥内容（`-----BEGIN PUBLIC KEY-----` 开头）备用。
+
+### 第四步：创建 JWT 凭据
+
+1. 控制台 → 项目管理 → 点开你的项目 → **添加凭据**
+2. 认证方式选 **JSON Web Token**
+3. 粘贴上一步的公钥内容 → 保存
+4. 记下 **凭据ID**（格式如 `TMB2M4VR9V`）
+
+### 第五步：获取 API Host
+
+1. 控制台 → 左侧菜单 → **设置**
+2. 找到 **API Host**（格式如 `mv4gkk5acy.re.qweatherapi.com`）
+
+### 第六步：填写配置
+
+```bash
+# 编辑 ~/.ccday.conf
+QWEATHER_API_HOST=mv4gkk5acy.re.qweatherapi.com   # 第五步获取
+QWEATHER_KID=TMB2M4VR9V                            # 第四步凭据ID
+QWEATHER_PROJECT_ID=3K85Y9JGHF                     # 第二步项目ID
+QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
+QWEATHER_LOCATION=116.38,39.91                     # 你的城市经纬度
+```
+
+---
+
+## Claude Code Skill
+
+ccday 提供一个 `/ccday` skill，在对话中快速查看当前状态栏内容：
+
+```bash
+# 安装 skill（install.sh 已自动完成）
+# 手动安装：
+cp skills/ccday.md ~/.claude/skills/ccday.md
+```
+
+在 Claude Code 中输入 `/ccday` 即可查看当前天气和倒计时。
+
+---
 
 ## 文件结构
 
 ```
 ccday/
-├── install.sh              # 一键安装
-├── uninstall.sh            # 卸载
+├── install.sh
+├── uninstall.sh
 ├── README.md
-└── scripts/
-    ├── ccday-label.sh      # 主脚本（写入 claude-hud customLine）
-    └── holidays.json       # 节假日 + 出行灵感数据
+├── scripts/
+│   ├── ccday-label.sh      # 主脚本
+│   └── holidays.json       # 节假日 + 出行灵感数据
+└── skills/
+    └── ccday.md            # Claude Code skill
+```
+
+## 卸载
+
+```bash
+bash uninstall.sh
 ```
 
 ## License

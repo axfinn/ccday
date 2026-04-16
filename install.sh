@@ -5,7 +5,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
+SKILLS_DIR="$HOME/.claude/skills"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+IS_MAC=false
+[[ "$(uname)" == "Darwin" ]] && IS_MAC=true
 
 echo "📦 安装 ccday..."
 
@@ -16,31 +19,50 @@ cp "$SCRIPT_DIR/scripts/holidays.json" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/ccday-label.sh"
 echo "✅ 脚本已安装到 $INSTALL_DIR"
 
-# 2. 配置文件
-if [ ! -f "$HOME/.ccday.conf" ]; then
-    cat > "$HOME/.ccday.conf" <<'EOF'
-# ccday 配置文件
-# 和风天气 API Key（免费注册：https://dev.qweather.com）
-QWEATHER_KEY=
+# 2. 安装 skill
+mkdir -p "$SKILLS_DIR"
+cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/"
+echo "✅ Skill 已安装: /ccday"
 
-# 城市 ID（北京=101010100，上海=101020100，广州=101280101，深圳=101280601）
-# 查询城市ID: https://github.com/qwd/LocationList
-QWEATHER_LOCATION=101010100
+# 3. 配置文件（仅在 HOME，不进项目）
+if [ ! -f "$HOME/.ccday.conf" ]; then
+    if $IS_MAC; then
+        cat > "$HOME/.ccday.conf" <<'EOF'
+# ccday 配置文件 — 此文件在 HOME 目录，不会进入项目仓库
+# macOS 用户：系统天气自动生效，无需填写 API 配置
+# 如需使用和风天气 API，参考 README 申请并填写以下配置：
+# QWEATHER_API_HOST=xxxxxx.re.qweatherapi.com
+# QWEATHER_KID=你的凭据ID
+# QWEATHER_PROJECT_ID=你的项目ID
+# QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
+QWEATHER_LOCATION=116.38,39.91
 EOF
-    echo "✅ 配置文件已创建: ~/.ccday.conf（请填入 QWEATHER_KEY）"
+        echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
+    else
+        cat > "$HOME/.ccday.conf" <<'EOF'
+# ccday 配置文件 — 此文件在 HOME 目录，不会进入项目仓库
+# 申请和风天气免费 API: https://console.qweather.com
+# 详细教程: 在 Claude Code 中输入 /ccday
+QWEATHER_API_HOST=
+QWEATHER_KID=
+QWEATHER_PROJECT_ID=
+QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
+QWEATHER_LOCATION=116.38,39.91
+EOF
+        echo "✅ 配置文件已创建: ~/.ccday.conf"
+    fi
 else
     echo "ℹ️  配置文件已存在: ~/.ccday.conf"
 fi
 
-# 3. 更新 claude settings.json — 注入 statusLine
+# 4. 注入 statusLine 到 claude settings.json
 if [ ! -f "$CLAUDE_SETTINGS" ]; then
     echo "⚠️  未找到 $CLAUDE_SETTINGS，请手动配置 statusLine（见 README）"
     exit 0
 fi
 
-# 检查是否已有 statusLine
 if python3 -c "import json; d=json.load(open('$CLAUDE_SETTINGS')); exit(0 if 'statusLine' in d else 1)" 2>/dev/null; then
-    echo "ℹ️  settings.json 已有 statusLine 配置，跳过（请手动合并，见 README）"
+    echo "ℹ️  settings.json 已有 statusLine，跳过"
 else
     python3 - "$CLAUDE_SETTINGS" "$INSTALL_DIR/ccday-label.sh" <<'PYEOF'
 import json, sys
@@ -50,7 +72,6 @@ script_path = sys.argv[2]
 with open(settings_path) as f:
     cfg = json.load(f)
 
-# 尝试找 claude-hud 插件路径
 hud_cmd = (
     f"bash -c '{script_path} 2>/dev/null; "
     "plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/claude-hud/claude-hud/*/ 2>/dev/null "
@@ -58,11 +79,7 @@ hud_cmd = (
     "[ -n \"$plugin_dir\" ] && exec bun --env-file /dev/null \"${plugin_dir}src/index.ts\"'"
 )
 
-cfg["statusLine"] = {
-    "padding": 0,
-    "command": hud_cmd,
-    "type": "command"
-}
+cfg["statusLine"] = {"padding": 0, "command": hud_cmd, "type": "command"}
 
 with open(settings_path, 'w') as f:
     json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -74,9 +91,12 @@ fi
 echo ""
 echo "🎉 安装完成！"
 echo ""
-echo "下一步："
-echo "  1. 编辑 ~/.ccday.conf，填入 QWEATHER_KEY"
-echo "  2. 重启 Claude Code"
-echo "  3. 状态栏将显示: ☀️25°/15°晴 │ 🔨劳动节还有15天 │ 🏖周末还有2天 │ 🌸张家界四月云海最美"
+if $IS_MAC; then
+    echo "macOS 用户直接重启 Claude Code 即可，系统天气自动生效。"
+else
+    echo "下一步："
+    echo "  1. 在 Claude Code 中输入 /ccday 按向导申请和风天气 API"
+    echo "  2. 重启 Claude Code"
+fi
 echo ""
-echo "获取和风天气免费 Key: https://dev.qweather.com"
+echo "状态栏效果: 🌧14°小雨 │ 🔨劳动节还有15天 │ 🏖周末还有2天 │ 🌊 厦门鼓浪屿..."
