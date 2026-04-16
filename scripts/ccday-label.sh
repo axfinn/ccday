@@ -171,6 +171,26 @@ elif weekday == 6:
 else:
     parts.append(f"🏖{5-weekday}天")
 
+# ── 出行灵感（周末=周边游，平时=20%概率年度旅游）────────
+try:
+    tips = hdata.get("travel_tips", [])
+    month = today.month
+    season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
+    random.seed(today.toordinal())
+    is_weekend = weekday >= 5
+    show_annual = (not is_weekend) and (random.random() < 0.2)
+    if show_annual:
+        pool = [t for t in tips if t.get("type") == "annual" and t["season"] in (season, "all")]
+    else:
+        pool = [t for t in tips if t.get("type") == "nearby"]
+    if not pool:
+        pool = tips
+    tip = random.choice(pool)["tip"]
+    if len(tip) > 20: tip = tip[:19] + "…"
+    parts.append(tip)
+except Exception:
+    pass
+
 print(" ".join(parts))
 PYEOF
 )
