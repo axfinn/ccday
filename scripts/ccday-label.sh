@@ -171,7 +171,7 @@ elif weekday == 6:
 else:
     parts.append(f"🏖 {5-weekday}天")
 
-# ── 出行灵感 / 段子（周末=周边游，平时=20%年度旅游，10%段子）────
+# ── 出行灵感 / 段子（周末=周边游，平时=20%年度旅游，50%段子）────
 try:
     tips = hdata.get("travel_tips", [])
     jokes = hdata.get("jokes", [])
@@ -179,16 +179,30 @@ try:
     season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
     random.seed(today.toordinal())
     r = random.random()
-    if jokes and r < 0.1:
-        tip = random.choice(jokes)
-    elif r < 0.3 and not (weekday >= 5):
+
+    # 尝试读 AI 生成的今日段子缓存
+    ai_joke = None
+    joke_cache = os.path.expanduser("~/.ccday-joke-cache.json")
+    try:
+        with open(joke_cache) as jf:
+            jdata = json.load(jf)
+            if jdata.get("date") == str(today):
+                ai_joke = jdata.get("joke")
+    except Exception:
+        pass
+
+    joke_pool = ([ai_joke] if ai_joke else []) + jokes
+
+    if joke_pool and r < 0.5:
+        tip = random.choice(joke_pool)
+    elif r < 0.7 and not (weekday >= 5):
         pool = [t for t in tips if t.get("type") == "annual" and t["season"] in (season, "all")]
         tip = random.choice(pool)["tip"] if pool else None
     else:
         pool = [t for t in tips if t.get("type") == "nearby"]
         tip = random.choice(pool)["tip"] if pool else None
     if tip:
-        if len(tip) > 20: tip = tip[:19] + "…"
+        if len(tip) > 22: tip = tip[:21] + "…"
         parts.append(tip)
 except Exception:
     pass
@@ -263,6 +277,57 @@ except: pass
     if [ -n "$BILLING" ]; then
         LINE2="${LINE2:+${LINE2} │ }${BILLING}"
     fi
+fi
+
+# ── AI 段子生成（后台，每天一次，缓存到 ~/.ccday-joke-cache.json）──
+JOKE_CACHE="$HOME/.ccday-joke-cache.json"
+TODAY=$(date +%Y-%m-%d)
+NEED_GEN=false
+if [ ! -f "$JOKE_CACHE" ]; then
+    NEED_GEN=true
+else
+    CACHED_DATE=$(python3 -c "import json; print(json.load(open('$JOKE_CACHE')).get('date',''))" 2>/dev/null)
+    [ "$CACHED_DATE" != "$TODAY" ] && NEED_GEN=true
+fi
+
+if $NEED_GEN && [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+    (python3 - "$JOKE_CACHE" "$TODAY" \
+      "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}" \
+      "$ANTHROPIC_AUTH_TOKEN" <<'JOKEEOF'
+import sys, json, urllib.request, urllib.error
+
+cache_path, today, base_url, token = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+base_url = base_url.rstrip('/')
+
+payload = json.dumps({
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 80,
+    "messages": [{
+        "role": "user",
+        "content": "写一条程序员段子或打气的话，要幽默接地气，15字以内，直接输出内容不要加引号或解释，可以带一个emoji开头"
+    }]
+}).encode()
+
+req = urllib.request.Request(
+    f"{base_url}/v1/messages",
+    data=payload,
+    headers={
+        "Authorization": f"Bearer {token}",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+)
+try:
+    with urllib.request.urlopen(req, timeout=8) as r:
+        data = json.load(r)
+    joke = data["content"][0]["text"].strip().strip('"').strip("'")
+    if joke:
+        with open(cache_path, "w") as f:
+            json.dump({"date": today, "joke": joke}, f, ensure_ascii=False)
+except Exception:
+    pass
+JOKEEOF
+    ) &>/dev/null &
 fi
 
 [ -z "$LINE" ] && exit 0
