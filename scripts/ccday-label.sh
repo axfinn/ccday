@@ -197,6 +197,54 @@ print(" ".join(parts))
 PYEOF
 )
 
+# ── 旅行计划 ──────────────────────────────────────────
+if [ -n "${TRIP_NAME:-}" ] && [ -n "${TRIP_LAT:-}" ] && [ -n "${TRIP_LNG:-}" ]; then
+    TRIP=$(python3 -c "
+import math, datetime, sys, random
+
+name  = sys.argv[1]
+tlat  = float(sys.argv[2])
+tlng  = float(sys.argv[3])
+hlat  = float(sys.argv[4])
+hlng  = float(sys.argv[5])
+tdate = sys.argv[6]
+tips_raw = sys.argv[7]
+
+# 球面距离（km）
+R = 6371
+lat1,lat2 = math.radians(hlat), math.radians(tlat)
+dlat = math.radians(tlat - hlat)
+dlng = math.radians(tlng - hlng)
+a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlng/2)**2
+km = round(R * 2 * math.asin(math.sqrt(a)))
+
+# 倒计时
+today = datetime.date.today()
+days_left = ''
+if tdate:
+    try:
+        td = datetime.date.fromisoformat(tdate)
+        diff = (td - today).days
+        if diff > 0:    days_left = f'·{diff}天后'
+        elif diff == 0: days_left = '·就是今天!'
+    except: pass
+
+# 注意事项轮换
+tip = ''
+if tips_raw:
+    tips = [t.strip() for t in tips_raw.split(';') if t.strip()]
+    if tips:
+        random.seed(today.toordinal())
+        tip = ' · ' + random.choice(tips)
+
+if days_left or not tdate:
+    print(f'🗺️  {name} {km}km{days_left}{tip}')
+" "$TRIP_NAME" "$TRIP_LAT" "$TRIP_LNG" \
+  "${HOME_LAT:-31.28}" "${HOME_LNG:-121.52}" \
+  "${TRIP_DATE:-}" "${TRIP_TIPS:-}" 2>/dev/null)
+    [ -n "$TRIP" ] && LINE="${LINE} │ ${TRIP}"
+fi
+
 # ── Billing（bilibili 内网）────────────────────────────
 TOKEN="${ANTHROPIC_AUTH_TOKEN:-}"
 if [ -n "$TOKEN" ]; then
