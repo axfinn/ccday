@@ -158,40 +158,20 @@ try:
         if min_days == 0:
             parts.append(f"{next_holiday['emoji']}今天{next_holiday['name']}!")
         else:
-            parts.append(f"{next_holiday['emoji']}{next_holiday['name']}还有{min_days}天")
+            parts.append(f"{next_holiday['emoji']}{next_holiday['name']}·{min_days}天")
 except Exception:
     pass
 
 # ── 周末倒计时 ────────────────────────────────────────
 weekday = today.weekday()
 if weekday == 5:
-    parts.append("🏖周末快乐!")
+    parts.append("🏖休息!")
 elif weekday == 6:
-    parts.append("🏖周末最后一天")
+    parts.append("🏖最后一天")
 else:
-    parts.append(f"🏖周末还有{5-weekday}天")
+    parts.append(f"🏖{5-weekday}天")
 
-# ── 出行灵感 ──────────────────────────────────────────
-try:
-    tips = hdata.get("travel_tips", [])
-    month = today.month
-    season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
-    is_weekend = weekday >= 5
-    if is_weekend:
-        nearby_pool = [t for t in tips if t.get("type") == "nearby"]
-        pool = nearby_pool if nearby_pool else [t for t in tips if t["season"] == "all"]
-    else:
-        pool = [t for t in tips if t.get("type") == "annual" and t["season"] in (season, "all")]
-    if not pool:
-        pool = tips
-    random.seed(today.toordinal())
-    tip = random.choice(pool)["tip"]
-    if len(tip) > 28: tip = tip[:27] + "…"
-    parts.append(tip)
-except Exception:
-    pass
-
-print(" │ ".join(parts))
+print(" ".join(parts))
 PYEOF
 )
 
@@ -207,13 +187,16 @@ try:
     l=d.get("daily_limit",0)
     p=d.get("daily_percent",0)
     b=d.get("balance",0)
-    print(f"💰${u:.1f}/${l:.0f}({p:.0f}%) 余${b:.1f}")
+    print(f"💰{p:.0f}%")
 except: pass
 ' 2>/dev/null)
     [ -n "$BILLING" ] && LINE="${LINE} │ ${BILLING}"
 fi
 
 [ -z "$LINE" ] && exit 0
+
+# 输出到 stdout（供 statusLine type:command 直接显示）
+echo "$LINE"
 
 /usr/bin/python3 -c "
 import json, sys, os
