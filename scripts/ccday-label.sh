@@ -85,13 +85,13 @@ def fetch_weather_api():
         if not d:
             return None
         icon_map = {
-            "晴":"☀️","多云":"⛅","阴":"☁️","小雨":"🌧","中雨":"🌧",
-            "大雨":"⛈","暴雨":"⛈","雷阵雨":"⛈","小雪":"🌨","中雪":"❄️",
-            "大雪":"❄️","雾":"🌫","霾":"😷","沙尘":"🌪",
+            "晴":"☀️ ","多云":"⛅ ","阴":"☁️ ","小雨":"🌧 ","中雨":"🌧 ",
+            "大雨":"⛈ ","暴雨":"⛈ ","雷阵雨":"⛈ ","小雪":"🌨 ","中雪":"❄️ ",
+            "大雪":"❄️ ","雾":"🌫 ","霾":"😷 ","沙尘":"🌪 ",
         }
         cond = d.get("text","")
-        icon = next((v for k,v in icon_map.items() if k in cond), "🌡")
-        return f"{icon}{d['temp']}°{cond}"
+        icon = next((v for k,v in icon_map.items() if k in cond), "🌡 ")
+        return f"{icon}{d['temp']}° {cond}"
     except Exception:
         return None
 
@@ -111,11 +111,11 @@ def fetch_weather_mac():
         temp = round(data.get("temperature", {}).get("value", 0))
         cond_code = data.get("conditionCode", "")
         cond_map = {
-            "Clear":"☀️晴","MostlyClear":"🌤晴","PartlyCloudy":"⛅多云",
-            "MostlyCloudy":"☁️多云","Cloudy":"☁️阴","Drizzle":"🌦小雨",
-            "Rain":"🌧雨","HeavyRain":"⛈大雨","Thunderstorm":"⛈雷雨",
-            "Snow":"🌨雪","Sleet":"🌨雨夹雪","Fog":"🌫雾","Haze":"😷霾",
-            "Windy":"💨大风","Breezy":"🌬微风",
+            "Clear":"☀️ 晴","MostlyClear":"🌤 晴","PartlyCloudy":"⛅ 多云",
+            "MostlyCloudy":"☁️ 多云","Cloudy":"☁️ 阴","Drizzle":"🌦 小雨",
+            "Rain":"🌧 雨","HeavyRain":"⛈ 大雨","Thunderstorm":"⛈ 雷雨",
+            "Snow":"🌨 雪","Sleet":"🌨 雨夹雪","Fog":"🌫 雾","Haze":"😷 霾",
+            "Windy":"💨 大风","Breezy":"🌬 微风",
         }
         desc = cond_map.get(cond_code, f"🌡{cond_code}")
         return f"{desc}{temp}°"
@@ -156,38 +156,40 @@ try:
             next_holiday = h
     if next_holiday:
         if min_days == 0:
-            parts.append(f"{next_holiday['emoji']}今天{next_holiday['name']}!")
+            parts.append(f"{next_holiday['emoji']} 今天{next_holiday['name']}!")
         else:
-            parts.append(f"{next_holiday['emoji']}{next_holiday['name']}·{min_days}天")
+            parts.append(f"{next_holiday['emoji']} {next_holiday['name']}·{min_days}天")
 except Exception:
     pass
 
 # ── 周末倒计时 ────────────────────────────────────────
 weekday = today.weekday()
 if weekday == 5:
-    parts.append("🏖休息!")
+    parts.append("🏖 休息!")
 elif weekday == 6:
-    parts.append("🏖最后一天")
+    parts.append("🏖 最后一天")
 else:
-    parts.append(f"🏖{5-weekday}天")
+    parts.append(f"🏖 {5-weekday}天")
 
-# ── 出行灵感（周末=周边游，平时=20%概率年度旅游）────────
+# ── 出行灵感 / 段子（周末=周边游，平时=20%年度旅游，10%段子）────
 try:
     tips = hdata.get("travel_tips", [])
+    jokes = hdata.get("jokes", [])
     month = today.month
     season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
     random.seed(today.toordinal())
-    is_weekend = weekday >= 5
-    show_annual = (not is_weekend) and (random.random() < 0.2)
-    if show_annual:
+    r = random.random()
+    if jokes and r < 0.1:
+        tip = random.choice(jokes)
+    elif r < 0.3 and not (weekday >= 5):
         pool = [t for t in tips if t.get("type") == "annual" and t["season"] in (season, "all")]
+        tip = random.choice(pool)["tip"] if pool else None
     else:
         pool = [t for t in tips if t.get("type") == "nearby"]
-    if not pool:
-        pool = tips
-    tip = random.choice(pool)["tip"]
-    if len(tip) > 20: tip = tip[:19] + "…"
-    parts.append(tip)
+        tip = random.choice(pool)["tip"] if pool else None
+    if tip:
+        if len(tip) > 20: tip = tip[:19] + "…"
+        parts.append(tip)
 except Exception:
     pass
 
