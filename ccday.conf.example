@@ -1,0 +1,32 @@
+# ccday 示例配置文件
+# 复制到 ~/.ccday.conf 后按需修改
+#
+# cp ccday.conf.example ~/.ccday.conf
+
+# ── 天气 ──────────────────────────────────────────────────────────────────────
+# 和风天气 API（可选，不填自动用 open-meteo 免费天气）
+# 申请地址: https://console.qweather.com
+QWEATHER_API_HOST=xxxxxx.re.qweatherapi.com
+QWEATHER_KID=你的凭据ID
+QWEATHER_PROJECT_ID=你的项目ID
+QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
+# 经纬度（open-meteo 和 QWeather 都用此项）
+# 查询经纬度: https://www.latlong.net
+QWEATHER_LOCATION=121.47,31.23   # 上海
+
+# ── 出发地（用于计算旅行距离）────────────────────────────────────────────────
+HOME_LAT=31.28
+HOME_LNG=121.52   # 上海杨浦
+
+# ── 旅行计划（可选，设置后第二行显示距离和注意事项）──────────────────────────
+# TRIP_NAME=长兴岛郊野公园
+# TRIP_LAT=31.38
+# TRIP_LNG=121.72
+# TRIP_DATE=2026-05-01          # 出发日期，过期后自动隐藏
+# TRIP_TIPS="带防晒霜;穿舒适的鞋;早点出发避开堵车;带足够的水;备好防虫喷雾"
+# 多条 tip 用分号分隔，每天轮换一条显示
+
+# ── Tip / 段子刷新频率 ────────────────────────────────────────────────────────
+CCDAY_AI_JOKE=1           # 启用 AI 生成段子（需要 claude CLI，0 关闭）
+CCDAY_TIP_ROTATE=5        # 每 N 次会话随机换一条 tip（默认 5）
+CCDAY_AI_JOKE_ROTATE=20   # 每 N 次会话用 AI 生成新段子（默认 20）
