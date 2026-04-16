@@ -52,6 +52,8 @@ HOME_LNG=116.38
 
 # AI 段子（每天一次，会话结束自动生成）
 CCDAY_AI_JOKE=1
+CCDAY_TIP_ROTATE=5
+CCDAY_AI_JOKE_ROTATE=20
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -76,8 +78,10 @@ HOME_LNG=116.38
 # TRIP_DATE=2026-05-01
 # TRIP_TIPS="带防晒霜;穿舒适的鞋;早点出发"
 
-# AI 段子（每天一次，会话结束自动生成）
-CCDAY_AI_JOKE=1
+# Tip/段子刷新频率（按会话次数）
+CCDAY_AI_JOKE=1           # 启用 AI 生成段子
+CCDAY_TIP_ROTATE=5        # 每 N 次会话随机换一条 tip
+CCDAY_AI_JOKE_ROTATE=20   # 每 N 次会话用 AI 生成新段子
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi

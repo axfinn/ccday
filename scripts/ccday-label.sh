@@ -169,36 +169,32 @@ elif weekday == 6:
 else:
     parts.append(f"🏖 {5-weekday}天")
 
-# ── 出行灵感 / 段子（周末=周边游，平时=20%年度旅游，50%段子）────
+# ── 出行灵感 / 段子（优先读 tip 缓存，缓存不存在时随机选）────
 try:
-    tips = hdata.get("travel_tips", [])
-    jokes = hdata.get("jokes", [])
-    month = today.month
-    season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
-    random.seed(today.toordinal())
-    r = random.random()
-
-    # 尝试读 AI 生成的今日段子缓存
-    ai_joke = None
-    joke_cache = os.path.expanduser("~/.ccday-joke-cache.json")
+    tip = None
+    tip_cache = os.path.expanduser("~/.ccday-tip-cache.json")
     try:
-        with open(joke_cache) as jf:
-            jdata = json.load(jf)
-            if jdata.get("date") == str(today):
-                ai_joke = jdata.get("joke")
+        with open(tip_cache) as jf:
+            tip = json.load(jf).get("tip")
     except Exception:
         pass
 
-    joke_pool = ([ai_joke] if ai_joke else []) + jokes
+    if not tip:
+        tips = hdata.get("travel_tips", [])
+        jokes = hdata.get("jokes", [])
+        month = today.month
+        season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
+        random.seed(today.toordinal())
+        r = random.random()
+        if jokes and r < 0.5:
+            tip = random.choice(jokes)
+        elif r < 0.7 and not (weekday >= 5):
+            pool = [t for t in tips if t.get("type") == "annual" and t.get("season") in (season, "all")]
+            tip = random.choice(pool)["tip"] if pool else None
+        else:
+            pool = [t for t in tips if t.get("type") == "nearby"]
+            tip = random.choice(pool)["tip"] if pool else None
 
-    if joke_pool and r < 0.5:
-        tip = random.choice(joke_pool)
-    elif r < 0.7 and not (weekday >= 5):
-        pool = [t for t in tips if t.get("type") == "annual" and t["season"] in (season, "all")]
-        tip = random.choice(pool)["tip"] if pool else None
-    else:
-        pool = [t for t in tips if t.get("type") == "nearby"]
-        tip = random.choice(pool)["tip"] if pool else None
     if tip:
         if len(tip) > 22: tip = tip[:21] + "…"
         parts.append(tip)
