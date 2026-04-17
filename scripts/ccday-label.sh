@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 番茄钟 + 休息/喝水提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.5.2
+# 版本: v0.5.4
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -37,7 +37,7 @@ export CCDAY_WORK_END CCDAY_GOAL CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
   "$QWEATHER_PRIVATE_KEY" "$QWEATHER_LOCATION" "$HOLIDAYS_JSON" <<'PYEOF'
-import sys, json, datetime, random, urllib.request, base64, time, os, platform, gzip as gzipmod
+import sys, json, datetime, random, urllib.request, base64, time, os, platform, gzip as gzipmod, subprocess
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 api_host      = sys.argv[1]
@@ -49,6 +49,24 @@ holidays_file = sys.argv[6]
 
 today   = datetime.date.today()
 parts   = []
+
+def send_notification(title, msg):
+    """跨平台系统通知：macOS 用 osascript，Linux 用 notify-send"""
+    try:
+        sys_name = platform.system()
+        if sys_name == "Darwin":
+            subprocess.Popen(
+                ["osascript", "-e",
+                 f'display notification "{msg}" with title "{title}" sound name "Glass"'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        elif sys_name == "Linux":
+            subprocess.Popen(
+                ["notify-send", title, msg, "--urgency=normal", "--expire-time=10000"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+    except Exception:
+        pass
 
 # ── 天气（带30分钟缓存）──────────────────────────────────
 WEATHER_CACHE = os.path.expanduser("~/.ccday-weather-cache.json")
@@ -287,7 +305,23 @@ try:
                     "去趟洗手间", "做几个肩膀绕环",
                 ]
                 random.seed(int(elapsed))
-                parts.append(f"🧘 {random.choice(activities)}!")
+                activity = random.choice(activities)
+                parts.append(f"🧘 {activity}!")
+                # 系统通知：用标记文件防同一轮重复弹
+                notif_file = os.path.expanduser("~/.ccday-break-notif.json")
+                last_notif = 0
+                try:
+                    with open(notif_file) as f:
+                        last_notif = json.load(f).get("ts", 0)
+                except Exception:
+                    pass
+                if time.time() - last_notif > break_interval * 0.9:
+                    send_notification("🧘 休息提醒", activity)
+                    try:
+                        with open(notif_file, "w") as f:
+                            json.dump({"ts": time.time()}, f)
+                    except Exception:
+                        pass
         else:
             # 不需要确认：纯按时间，到点显示5分钟自动消失（同喝水逻辑）
             day_start  = now_dt.replace(hour=break_start_h, minute=break_start_m, second=0, microsecond=0)
@@ -300,7 +334,11 @@ try:
                     "去趟洗手间", "做几个肩膀绕环",
                 ]
                 random.seed(elapsed_min // (break_interval // 60))
-                parts.append(f"🧘 {random.choice(activities)}!")
+                activity = random.choice(activities)
+                parts.append(f"🧘 {activity}!")
+                # 系统通知：slot_min==0 时弹一次
+                if slot_min == 0:
+                    send_notification("🧘 休息提醒", activity)
 except Exception:
     pass
 
@@ -322,7 +360,11 @@ try:
         if slot_min < 5:  # 每轮开始的前5分钟显示提醒
             msgs = ["喝杯水", "补充水分", "记得喝水", "来杯水吧"]
             random.seed(elapsed_min // water_interval)
-            parts.append(f"💧 {random.choice(msgs)}!")
+            msg = random.choice(msgs)
+            parts.append(f"💧 {msg}!")
+            # 系统通知：slot_min==0 时弹一次
+            if slot_min == 0:
+                send_notification("💧 喝水提醒", msg)
 except Exception:
     pass
 
