@@ -475,7 +475,7 @@ import sys,json
 try:
     d=json.load(sys.stdin).get("data",{})
     p=d.get("daily_percent",0)
-    budget=float("'"${CCDAY_BILLING_BUDGET:-1000}"'")
+    budget=float("'"${CCDAY_BILLING_BUDGET:-0}"'")
     if budget > 0:
         used=d.get("daily_used",0)
         remain=budget-used
