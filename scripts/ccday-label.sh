@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 番茄钟 + 休息/喝水提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.5.4
+# 版本: v0.5.5
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）

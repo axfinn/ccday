@@ -2,7 +2,7 @@
 
 > Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 番茄钟 · 休息/喝水提醒 · 今日目标 · Git状态 · 出行灵感
 
-**版本：v0.5.3**
+**版本：v0.5.5**
 
 在 Claude Code 底部状态栏实时显示两行信息：
 
@@ -101,7 +101,9 @@ with open('$HOME/.ccday-goal.json', 'w') as f:
 
 ### 休息提醒
 
-每隔 `CCDAY_BREAK_INTERVAL` 分钟（默认50分钟），状态栏显示 `🧘 站起来伸个懒腰!` 等随机提示，同时触发系统通知弹窗（macOS / Linux）。
+每隔 `CCDAY_BREAK_INTERVAL` 分钟（默认50分钟），状态栏显示 `🧘 站起来伸个懒腰!` 等随机提示，同时触发提醒弹窗。
+
+macOS 会弹出**全屏提醒页面**（Safari），带30秒倒计时、随机段子，倒计时结束前点击会被怼，双击可强制关闭。Linux 使用 `notify-send` 系统通知。
 
 两种模式（`CCDAY_BREAK_CONFIRM`）：
 
@@ -235,6 +237,7 @@ ccday/
 
 ## 版本历史
 
+- **v0.5.5** — macOS 全屏休息提醒（Safari），30秒倒计时 + 随机段子 + 双击强制关闭
 - **v0.5.4** — 休息/喝水提醒触发系统通知弹窗（macOS osascript / Linux notify-send），修复 emoji 与数字间距
 - **v0.5.3** — 新增 `CCDAY_BILLING` 开关和 `CCDAY_BILLING_BUDGET` 预算配置，支持显示剩余金额
 - **v0.5.2** — 修复 macOS open-meteo 经纬度顺序错误导致天气获取失败
