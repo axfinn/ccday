@@ -26,7 +26,7 @@ echo "✅ 脚本已安装到 $INSTALL_DIR"
 # 2. 安装 skill（目录结构：~/.claude/skills/ccday/skill.md）
 mkdir -p "$SKILLS_DIR/ccday"
 rm -f "$SKILLS_DIR/ccday.md"          # 清理旧版单文件形式
-cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/ccday/skill.md"
+cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/ccday/SKILL.md"
 echo "✅ Skill 已安装: /ccday"
 
 # 3. 配置文件（仅在 HOME，不进项目）
