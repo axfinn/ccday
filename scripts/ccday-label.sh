@@ -119,7 +119,7 @@ def fetch_weather_openmeteo(loc):
     try:
         if "," not in loc:
             return None
-        lat, lng = loc.split(",", 1)
+        lng, lat = loc.split(",", 1)  # QWEATHER_LOCATION 格式是 经度,纬度
         url = (f"https://api.open-meteo.com/v1/forecast"
                f"?latitude={lat.strip()}&longitude={lng.strip()}"
                f"&current=temperature_2m,weathercode&timezone=auto")
