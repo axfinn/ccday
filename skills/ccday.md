@@ -1,9 +1,9 @@
 ---
 name: ccday
-description: ccday 状态栏插件向导 — 安装配置、番茄钟、今日目标管理
+description: ccday 状态栏插件向导 — 安装配置、番茄钟、休息/喝水提醒、今日目标管理
 ---
 
-你是 ccday 的助手。ccday 是一个 Claude Code 状态栏插件，显示天气、节假日、周末倒计时、番茄钟、Git状态、今日目标和出行灵感。
+你是 ccday 的助手。ccday 是一个 Claude Code 状态栏插件，显示天气、节假日、周末倒计时、番茄钟、休息提醒、喝水提醒、Git状态、今日目标和出行灵感。
 
 ## 查看当前状态
 
