@@ -50,17 +50,84 @@ holidays_file = sys.argv[6]
 today   = datetime.date.today()
 parts   = []
 
+def send_fullscreen_alert(title, msg):
+    """macOS 全屏 HTML 提醒，用 Safari 打开"""
+    import random as _r
+    jokes = [
+        "久坐伤身，代码再香也要站起来闻闻空气",
+        "你的椎间盘正在用沉默抗议",
+        "程序员三大错觉：再坐一会儿、马上就好、这个 bug 很简单",
+        "站起来！不然你的腰会比你的代码先崩溃",
+        "眼睛也是 CPU，过热需要散热",
+        "活动一下，回来思路更清晰，bug 自己会消失（大概）",
+        "你已经坐了很久了，连椅子都累了",
+        "起来走走，顺便想想那个困扰你的 bug",
+    ]
+    joke = _r.choice(jokes)
+    try:
+        js = r"""
+var total=30, clicks=0;
+var taunts=["才{n}秒？你在逗我？","认真的吗？才{n}秒！","椎间盘表示不服","{n}秒就够了？骗谁呢","再等等，就快了","你的腰还没谢谢你呢"];
+var el=document.getElementById('sec'), btn=document.getElementById('btn'), timerEl=document.getElementById('timer');
+var iv=setInterval(function(){
+  total--;
+  el.textContent=total;
+  if(total<=0){clearInterval(iv);timerEl.style.display='none';btn.textContent='好了，继续工作 ✓';btn.onclick=function(){window.close()}};
+},1000);
+function tryClose(){
+  if(total<=0){window.close();return}
+  clicks++;
+  var t=taunts[Math.min(clicks-1,taunts.length-1)].replace('{n}',total);
+  btn.textContent=t;
+  btn.style.background='#8a4a4a';
+  setTimeout(function(){btn.textContent='好了，继续工作';btn.style.background='#4a4a8a'},1500);
+}
+btn.addEventListener('dblclick',function(){window.close()});
+"""
+        html = (
+            '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+            '*{margin:0;padding:0;box-sizing:border-box}'
+            'body{background:#1a1a2e;color:white;display:flex;flex-direction:column;'
+            'align-items:center;justify-content:center;height:100vh;'
+            'font-family:-apple-system,sans-serif;text-align:center;padding:40px}'
+            '.emoji{font-size:120px;margin-bottom:20px}'
+            'h1{font-size:72px;font-weight:bold;margin-bottom:16px}'
+            '.activity{font-size:36px;color:#7eb8f7;margin-bottom:20px}'
+            'p{font-size:26px;color:#aaaacc;margin-bottom:40px;max-width:800px}'
+            'button{font-size:24px;padding:16px 48px;background:#4a4a8a;color:white;'
+            'border:none;border-radius:12px;cursor:pointer}'
+            '</style></head><body>'
+            '<div class="emoji">🧘</div>'
+            '<h1>休息一下！</h1>'
+            '<div class="activity">' + msg + '</div>'
+            '<p>' + joke + '</p>'
+            '<div id="timer" style="font-size:20px;color:#666;margin-bottom:20px">'
+            '还需休息 <span id="sec">30</span> 秒</div>'
+            '<button id="btn" onclick="tryClose()">好了，继续工作</button>'
+            '<div style="font-size:14px;color:#555;margin-top:12px">双击可强制关闭</div>'
+            '<script>' + js + '</script>'
+            '</body></html>'
+        )
+        html_path = os.path.expanduser("~/.ccday-break-alert.html")
+        with open(html_path, "w") as f:
+            f.write(html)
+        applescript = f'''tell application "Safari"
+  activate
+  open POSIX file "{html_path}"
+  delay 0.5
+  tell window 1 to set bounds to {{0, 0, 1440, 900}}
+end tell'''
+        subprocess.Popen(["osascript", "-e", applescript],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 def send_notification(title, msg):
-    """跨平台系统通知：macOS 用 osascript，Linux 用 notify-send"""
+    """跨平台系统通知：macOS 用全屏提醒，Linux 用 notify-send"""
     try:
         sys_name = platform.system()
         if sys_name == "Darwin":
-            # 用列表传参避免引号注入
-            script = f'display notification "{msg.replace(chr(34), "")}" with title "{title}" sound name "Glass"'
-            subprocess.Popen(
-                ["osascript", "-e", script],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            send_fullscreen_alert(title, msg)
         elif sys_name == "Linux":
             subprocess.Popen(
                 ["notify-send", title, msg, "--urgency=normal", "--expire-time=10000"],
