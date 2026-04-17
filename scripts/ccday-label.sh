@@ -260,7 +260,7 @@ try:
             mins = int(remaining // 60)
             secs = int(remaining % 60)
             label = f" {pomo_label}" if pomo_label else ""
-            parts.append(f"🍅{mins}:{secs:02d}{label}")
+            parts.append(f"🍅 {mins}:{secs:02d}{label}")
         else:
             parts.append("🍅 时间到!")
 except Exception:
@@ -456,9 +456,9 @@ except Exception:
     ahead = behind = 0
 
 parts = []
-if changed:  parts.append(f'📝{changed}')
-if behind:   parts.append(f'⬇{behind}')
-if ahead:    parts.append(f'⬆{ahead}')
+if changed:  parts.append(f'📝 {changed}')
+if behind:   parts.append(f'⬇ {behind}')
+if ahead:    parts.append(f'⬆ {ahead}')
 if parts:
     print(' '.join(parts))
 " 2>/dev/null)
