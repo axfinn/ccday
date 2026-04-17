@@ -29,7 +29,9 @@ CCDAY_BREAK_INTERVAL="${CCDAY_BREAK_INTERVAL:-50}"
 CCDAY_BREAK_DURATION="${CCDAY_BREAK_DURATION:-10}"
 CCDAY_BREAK_START="${CCDAY_BREAK_START:-09:00}"
 CCDAY_BREAK_END="${CCDAY_BREAK_END:-22:00}"
-export CCDAY_WORK_END CCDAY_GOAL CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END
+CCDAY_BREAK_CONFIRM="${CCDAY_BREAK_CONFIRM:-1}"   # 1=需要主动确认，0=定时自动消失（同喝水）
+CCDAY_WATER_INTERVAL="${CCDAY_WATER_INTERVAL:-60}"
+export CCDAY_WORK_END CCDAY_GOAL CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -247,8 +249,9 @@ except Exception:
 
 # ── 休息提醒 ──────────────────────────────────────────
 try:
-    break_interval = int(os.environ.get("CCDAY_BREAK_INTERVAL", "50")) * 60  # 默认50分钟
-    break_duration = int(os.environ.get("CCDAY_BREAK_DURATION", "10")) * 60  # 默认休息10分钟
+    break_interval = int(os.environ.get("CCDAY_BREAK_INTERVAL", "50")) * 60
+    break_duration = int(os.environ.get("CCDAY_BREAK_DURATION", "10")) * 60
+    break_confirm  = os.environ.get("CCDAY_BREAK_CONFIRM", "1") == "1"
     break_start_h, break_start_m = map(int, os.environ.get("CCDAY_BREAK_START", "09:00").split(":"))
     break_end_h,   break_end_m   = map(int, os.environ.get("CCDAY_BREAK_END",   "22:00").split(":"))
 
@@ -257,33 +260,68 @@ try:
     in_range = _dt.time(break_start_h, break_start_m) <= now_time <= _dt.time(break_end_h, break_end_m)
 
     if in_range:
-        break_file = os.path.expanduser("~/.ccday-break.json")
-        last_break = 0
-        resting    = False
-        try:
-            with open(break_file) as f:
-                bd = json.load(f)
-            last_break = bd.get("ts", 0)
-            # 如果正在休息中
-            if bd.get("resting") and time.time() - last_break < break_duration:
-                resting = True
-        except Exception:
-            pass
+        if break_confirm:
+            # 需要主动确认：读文件判断上次休息时间
+            break_file = os.path.expanduser("~/.ccday-break.json")
+            last_break = 0
+            resting    = False
+            try:
+                with open(break_file) as f:
+                    bd = json.load(f)
+                last_break = bd.get("ts", 0)
+                if bd.get("resting") and time.time() - last_break < break_duration:
+                    resting = True
+            except Exception:
+                pass
 
-        elapsed = time.time() - last_break if last_break else break_interval + 1
+            elapsed = time.time() - last_break if last_break else break_interval + 1
 
-        if resting:
-            rest_left = int((break_duration - (time.time() - last_break)) / 60) + 1
-            parts.append(f"🧘 休息中{rest_left}min")
-        elif elapsed >= break_interval:
-            activities = [
-                "站起来伸个懒腰", "倒杯水喝", "眺望远处20秒",
-                "做10个深蹲", "走动走动", "活动一下脖子",
-                "闭眼休息一下", "去趟洗手间", "做几个肩膀绕环",
-            ]
-            random.seed(int(elapsed))
-            act = random.choice(activities)
-            parts.append(f"🧘 {act}!")
+            if resting:
+                rest_left = int((break_duration - (time.time() - last_break)) / 60) + 1
+                parts.append(f"🧘 休息中{rest_left}min")
+            elif elapsed >= break_interval:
+                activities = [
+                    "站起来伸个懒腰", "眺望远处20秒", "做10个深蹲",
+                    "走动走动", "活动一下脖子", "闭眼休息一下",
+                    "去趟洗手间", "做几个肩膀绕环",
+                ]
+                random.seed(int(elapsed))
+                parts.append(f"🧘 {random.choice(activities)}!")
+        else:
+            # 不需要确认：纯按时间，到点显示5分钟自动消失（同喝水逻辑）
+            day_start  = now_dt.replace(hour=break_start_h, minute=break_start_m, second=0, microsecond=0)
+            elapsed_min = int((now_dt - day_start).total_seconds() / 60)
+            slot_min   = elapsed_min % (break_interval // 60)
+            if slot_min < 5:
+                activities = [
+                    "站起来伸个懒腰", "眺望远处20秒", "做10个深蹲",
+                    "走动走动", "活动一下脖子", "闭眼休息一下",
+                    "去趟洗手间", "做几个肩膀绕环",
+                ]
+                random.seed(elapsed_min // (break_interval // 60))
+                parts.append(f"🧘 {random.choice(activities)}!")
+except Exception:
+    pass
+
+# ── 喝水提醒 ──────────────────────────────────────────
+try:
+    water_interval = int(os.environ.get("CCDAY_WATER_INTERVAL", "60"))  # 分钟
+    water_start_h, water_start_m = map(int, os.environ.get("CCDAY_BREAK_START", "09:00").split(":"))
+    water_end_h,   water_end_m   = map(int, os.environ.get("CCDAY_BREAK_END",   "22:00").split(":"))
+
+    now_dt2  = _dt.datetime.now()
+    now_time2 = now_dt2.time()
+    in_range2 = _dt.time(water_start_h, water_start_m) <= now_time2 <= _dt.time(water_end_h, water_end_m)
+
+    if in_range2 and water_interval > 0:
+        # 从今天 BREAK_START 开始，每 water_interval 分钟的第5分钟内提醒
+        day_start = now_dt2.replace(hour=water_start_h, minute=water_start_m, second=0, microsecond=0)
+        elapsed_min = int((now_dt2 - day_start).total_seconds() / 60)
+        slot_min = elapsed_min % water_interval  # 当前在本轮的第几分钟
+        if slot_min < 5:  # 每轮开始的前5分钟显示提醒
+            msgs = ["喝杯水", "补充水分", "记得喝水", "来杯水吧"]
+            random.seed(elapsed_min // water_interval)
+            parts.append(f"💧 {random.choice(msgs)}!")
 except Exception:
     pass
 

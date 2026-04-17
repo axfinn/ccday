@@ -39,6 +39,8 @@ CCDAY_WORK_END=19:00      # 周五几点下班（默认 19:00）
 
 # ── 休息提醒 ──────────────────────────────────────────────────────────────────
 CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息（默认 50）
-CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（默认 10）
+CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（默认 10，仅 CONFIRM=1 时有效）
+CCDAY_BREAK_CONFIRM=1     # 1=需要主动确认休息（有倒计时），0=定时自动消失
 CCDAY_BREAK_START=09:00   # 提醒生效开始时间（默认 09:00）
 CCDAY_BREAK_END=22:00     # 提醒生效结束时间（默认 22:00）
+CCDAY_WATER_INTERVAL=60   # 每隔 N 分钟提醒喝水（默认 60，设 0 关闭）
