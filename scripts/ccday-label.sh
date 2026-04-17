@@ -316,7 +316,7 @@ try:
                 except Exception:
                     pass
                 if time.time() - last_notif > break_interval * 0.9:
-                    send_notification("🧘 休息提醒", activity)
+                    send_notification("休息提醒", "🧘 " + activity)
                     try:
                         with open(notif_file, "w") as f:
                             json.dump({"ts": time.time()}, f)
@@ -338,7 +338,7 @@ try:
                 parts.append(f"🧘 {activity}!")
                 # 系统通知：slot_min==0 时弹一次
                 if slot_min == 0:
-                    send_notification("🧘 休息提醒", activity)
+                    send_notification("休息提醒", "🧘 " + activity)
 except Exception:
     pass
 
@@ -364,7 +364,7 @@ try:
             parts.append(f"💧 {msg}!")
             # 系统通知：slot_min==0 时弹一次
             if slot_min == 0:
-                send_notification("💧 喝水提醒", msg)
+                send_notification("喝水提醒", "💧 " + msg)
 except Exception:
     pass
 
