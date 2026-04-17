@@ -23,10 +23,10 @@ chmod +x "$INSTALL_DIR/ccday-label.sh"
 chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
 echo "✅ 脚本已安装到 $INSTALL_DIR"
 
-# 2. 安装 skill（清理可能存在的同名目录，避免冲突）
-mkdir -p "$SKILLS_DIR"
-rm -rf "$SKILLS_DIR/ccday"   # 旧版可能留下的目录
-cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/"
+# 2. 安装 skill（目录结构：~/.claude/skills/ccday/skill.md）
+mkdir -p "$SKILLS_DIR/ccday"
+rm -f "$SKILLS_DIR/ccday.md"          # 清理旧版单文件形式
+cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/ccday/skill.md"
 echo "✅ Skill 已安装: /ccday"
 
 # 3. 配置文件（仅在 HOME，不进项目）

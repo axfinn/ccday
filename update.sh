@@ -38,8 +38,9 @@ chmod +x "$INSTALL_DIR/ccday-label.sh"
 chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
 
 SKILLS_DIR="$HOME/.claude/skills"
-mkdir -p "$SKILLS_DIR"
-cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/"
+mkdir -p "$SKILLS_DIR/ccday"
+rm -f "$SKILLS_DIR/ccday.md"   # 清理旧版单文件形式
+cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/ccday/skill.md"
 
 # 记录新版本
 NEW_VERSION=$(grep '^VERSION=' "$SCRIPT_DIR/install.sh" | head -1 | cut -d= -f2 | tr -d '"')
