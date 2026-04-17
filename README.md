@@ -228,7 +228,8 @@ ccday/
 | `~/.ccday-pomodoro.json` | 番茄钟状态 |
 | `~/.ccday-goal.json` | 今日目标完成状态 |
 | `~/.ccday-break.json` | 休息提醒状态（CONFIRM=1 时使用） |
-| `~/.ccday-break-notif.json` | 休息系统通知去重标记 |
+| `~/.ccday-notif-break.json` | 休息系统通知去重标记 |
+| `~/.ccday-notif-water.json` | 喝水系统通知去重标记 |
 
 ---
 
