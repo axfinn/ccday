@@ -2,7 +2,7 @@
 
 > Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 番茄钟 · 休息/喝水提醒 · 今日目标 · Git状态 · 出行灵感
 
-**版本：v0.5.0**
+**版本：v0.5.1**
 
 在 Claude Code 底部状态栏实时显示两行信息：
 
@@ -205,6 +205,7 @@ cp skills/ccday.md ~/.claude/skills/ccday.md
 ```
 ccday/
 ├── install.sh
+├── update.sh                       # 一键更新
 ├── uninstall.sh
 ├── ccday.conf.example          # 完整示例配置
 ├── README.md
@@ -213,7 +214,7 @@ ccday/
 │   ├── ccday-joke-gen.sh       # Stop hook（更新 tip/段子缓存）
 │   └── holidays.json           # 节假日 + 调休 + 出行灵感 + 段子
 └── skills/
-    └── ccday.md                # Claude Code skill
+    └── ccday.md                # Claude Code skill 源文件
 ```
 
 ### 运行时缓存文件（~/ 目录，不进入项目）
@@ -232,6 +233,7 @@ ccday/
 
 ## 版本历史
 
+- **v0.5.1** — 修复 `/ccday` skill 找不到（目录结构 + SKILL.md 大写）、支持 `bash update.sh` 一键更新
 - **v0.5.0** — 休息提醒（可配置强确认/自动消失）、喝水提醒（自动消失）
 - **v0.4.0** — 天气缓存、调休感知、番茄钟、Git状态、今日目标
 - **v0.3.0** — tip 每5次随机换，每20次AI生成；mac天气改open-meteo
