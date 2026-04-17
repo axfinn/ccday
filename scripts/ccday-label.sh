@@ -25,7 +25,11 @@ QWEATHER_PRIVATE_KEY="${QWEATHER_PRIVATE_KEY:-$HOME/.ccday-private.pem}"
 QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"
 CCDAY_WORK_END="${CCDAY_WORK_END:-19:00}"
 CCDAY_GOAL="${CCDAY_GOAL:-}"
-export CCDAY_WORK_END CCDAY_GOAL
+CCDAY_BREAK_INTERVAL="${CCDAY_BREAK_INTERVAL:-50}"
+CCDAY_BREAK_DURATION="${CCDAY_BREAK_DURATION:-10}"
+CCDAY_BREAK_START="${CCDAY_BREAK_START:-09:00}"
+CCDAY_BREAK_END="${CCDAY_BREAK_END:-22:00}"
+export CCDAY_WORK_END CCDAY_GOAL CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -238,6 +242,48 @@ try:
             parts.append(f"🍅{mins}:{secs:02d}{label}")
         else:
             parts.append("🍅 时间到!")
+except Exception:
+    pass
+
+# ── 休息提醒 ──────────────────────────────────────────
+try:
+    break_interval = int(os.environ.get("CCDAY_BREAK_INTERVAL", "50")) * 60  # 默认50分钟
+    break_duration = int(os.environ.get("CCDAY_BREAK_DURATION", "10")) * 60  # 默认休息10分钟
+    break_start_h, break_start_m = map(int, os.environ.get("CCDAY_BREAK_START", "09:00").split(":"))
+    break_end_h,   break_end_m   = map(int, os.environ.get("CCDAY_BREAK_END",   "22:00").split(":"))
+
+    now_dt   = _dt.datetime.now()
+    now_time = now_dt.time()
+    in_range = _dt.time(break_start_h, break_start_m) <= now_time <= _dt.time(break_end_h, break_end_m)
+
+    if in_range:
+        break_file = os.path.expanduser("~/.ccday-break.json")
+        last_break = 0
+        resting    = False
+        try:
+            with open(break_file) as f:
+                bd = json.load(f)
+            last_break = bd.get("ts", 0)
+            # 如果正在休息中
+            if bd.get("resting") and time.time() - last_break < break_duration:
+                resting = True
+        except Exception:
+            pass
+
+        elapsed = time.time() - last_break if last_break else break_interval + 1
+
+        if resting:
+            rest_left = int((break_duration - (time.time() - last_break)) / 60) + 1
+            parts.append(f"🧘 休息中{rest_left}min")
+        elif elapsed >= break_interval:
+            activities = [
+                "站起来伸个懒腰", "倒杯水喝", "眺望远处20秒",
+                "做10个深蹲", "走动走动", "活动一下脖子",
+                "闭眼休息一下", "去趟洗手间", "做几个肩膀绕环",
+            ]
+            random.seed(int(elapsed))
+            act = random.choice(activities)
+            parts.append(f"🧘 {act}!")
 except Exception:
     pass
 
