@@ -1,25 +1,19 @@
 #!/bin/bash
-# ccday-label.sh — 天气 + 节假日倒计时 → claude-hud customLine
+# ccday-label.sh — 天气 + 节假日 + 周末 + 番茄钟 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
 #
-# 配置文件（任选其一，均在 HOME 目录，不进入项目）:
-#   ~/.ccday.conf / ~/.ccday.env  — shell 格式 KEY=VALUE
-#   ~/.ccday.yaml                 — YAML 格式
-#
-# 配置项:
-#   QWEATHER_API_HOST   和风天气 API Host（控制台-设置）
-#   QWEATHER_KID        凭据ID
-#   QWEATHER_PROJECT_ID 项目ID
-#   QWEATHER_PRIVATE_KEY 私钥路径（默认 ~/.ccday-private.pem）
-#   QWEATHER_LOCATION   经纬度或城市ID（默认 116.38,39.91）
+# 配置项（~/.ccday.conf）:
+#   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
+#   QWEATHER_LOCATION   经纬度，如 121.47,31.23
+#   CCDAY_WORK_END      下班时间，默认 19:00
+#   CCDAY_GOAL          今日目标，如 "完成登录模块"
+#   TRIP_*              旅行计划（可选）
 
 HOLIDAYS_JSON="$(dirname "$0")/holidays.json"
 
-# 加载配置：优先 .ccday.conf，其次 .ccday.env，最后 .ccday.yaml
 for f in "$HOME/.ccday.conf" "$HOME/.ccday.env"; do
     [ -f "$f" ] && source "$f" && break
 done
-# YAML 支持（简单 key: value 格式）
 if [ -z "$QWEATHER_API_HOST" ] && [ -f "$HOME/.ccday.yaml" ]; then
     eval "$(grep -E '^\s*\w+\s*:' "$HOME/.ccday.yaml" | sed 's/\s*:\s*/=/' | sed 's/^/export /')"
 fi
@@ -28,9 +22,10 @@ QWEATHER_API_HOST="${QWEATHER_API_HOST:-}"
 QWEATHER_KID="${QWEATHER_KID:-}"
 QWEATHER_PROJECT_ID="${QWEATHER_PROJECT_ID:-}"
 QWEATHER_PRIVATE_KEY="${QWEATHER_PRIVATE_KEY:-$HOME/.ccday-private.pem}"
-QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"  # 默认上海
+QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"
 CCDAY_WORK_END="${CCDAY_WORK_END:-19:00}"
-export CCDAY_WORK_END
+CCDAY_GOAL="${CCDAY_GOAL:-}"
+export CCDAY_WORK_END CCDAY_GOAL
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -38,17 +33,36 @@ LINE=$(/usr/bin/python3 - \
 import sys, json, datetime, random, urllib.request, base64, time, os, platform, gzip as gzipmod
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-api_host  = sys.argv[1]
-kid       = sys.argv[2]
-sub       = sys.argv[3]
-key_path  = os.path.expanduser(sys.argv[4])
-location  = sys.argv[5]
+api_host      = sys.argv[1]
+kid           = sys.argv[2]
+sub           = sys.argv[3]
+key_path      = os.path.expanduser(sys.argv[4])
+location      = sys.argv[5]
 holidays_file = sys.argv[6]
 
-today = datetime.date.today()
-parts = []
+today   = datetime.date.today()
+parts   = []
 
-# ── 天气 ──────────────────────────────────────────────
+# ── 天气（带30分钟缓存）──────────────────────────────────
+WEATHER_CACHE = os.path.expanduser("~/.ccday-weather-cache.json")
+
+def load_weather_cache():
+    try:
+        with open(WEATHER_CACHE) as f:
+            d = json.load(f)
+        if time.time() - d.get("ts", 0) < 1800:  # 30分钟
+            return d.get("text")
+    except Exception:
+        pass
+    return None
+
+def save_weather_cache(text):
+    try:
+        with open(WEATHER_CACHE, "w") as f:
+            json.dump({"ts": time.time(), "text": text}, f)
+    except Exception:
+        pass
+
 def make_jwt():
     try:
         with open(key_path, "rb") as f:
@@ -66,7 +80,6 @@ def make_jwt():
         return None
 
 def fetch_weather_api():
-    """和风天气 JWT 方式"""
     if not (api_host and kid and sub):
         return None
     jwt = make_jwt()
@@ -97,9 +110,7 @@ def fetch_weather_api():
         return None
 
 def fetch_weather_openmeteo(loc):
-    """open-meteo.com — 免费无需 key，按经纬度"""
     try:
-        # loc 格式: "lat,lng" 或 城市ID（城市ID无法用，跳过）
         if "," not in loc:
             return None
         lat, lng = loc.split(",", 1)
@@ -109,10 +120,9 @@ def fetch_weather_openmeteo(loc):
         req = urllib.request.Request(url, headers={"User-Agent": "ccday/1.0"})
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.loads(r.read())
-        cur = data.get("current", {})
+        cur  = data.get("current", {})
         temp = round(cur.get("temperature_2m", 0))
         code = cur.get("weathercode", 0)
-        # WMO weather code → emoji + 描述
         if code == 0:                      desc = "☀️ 晴"
         elif code <= 2:                    desc = "⛅ 多云"
         elif code == 3:                    desc = "☁️ 阴"
@@ -129,14 +139,12 @@ def fetch_weather_openmeteo(loc):
     except Exception:
         return None
 
-def fetch_weather_mac():
-    """macOS 天气：优先 open-meteo，无需任何配置"""
-    return fetch_weather_openmeteo(location)
-
-is_mac = platform.system() == "Darwin"
-weather_text = fetch_weather_mac() if is_mac else fetch_weather_api()
+weather_text = load_weather_cache()
 if not weather_text:
-    weather_text = fetch_weather_openmeteo(location)
+    is_mac = platform.system() == "Darwin"
+    weather_text = (None if is_mac else fetch_weather_api()) or fetch_weather_openmeteo(location)
+    if weather_text:
+        save_weather_cache(weather_text)
 
 if weather_text:
     parts.append(weather_text)
@@ -145,12 +153,13 @@ if weather_text:
 try:
     with open(holidays_file, encoding="utf-8") as f:
         hdata = json.load(f)
-    holidays = hdata.get("holidays", [])
+    holidays    = hdata.get("holidays", [])
+    workdays    = set(hdata.get("extra_workdays", []))   # 调休上班日
     next_holiday = None
     min_days = 9999
     for h in holidays:
         hdate = datetime.date.fromisoformat(h["date"])
-        diff = (hdate - today).days
+        diff  = (hdate - today).days
         if 0 <= diff < min_days:
             min_days = diff
             next_holiday = h
@@ -160,35 +169,97 @@ try:
         else:
             parts.append(f"{next_holiday['emoji']} {next_holiday['name']}·{min_days}天")
 except Exception:
-    pass
+    hdata    = {}
+    workdays = set()
 
-# ── 周末倒计时 ────────────────────────────────────────
+# ── 周末倒计时（感知调休）────────────────────────────────
 import datetime as _dt
-weekday = today.weekday()
-if weekday == 5:
+weekday  = today.weekday()
+today_str = str(today)
+
+# 判断今天是否实际需要上班（调休）
+is_extra_workday = today_str in workdays
+
+if weekday == 5 and today_str not in workdays:
     parts.append("🏖 休息!")
-elif weekday == 6:
+elif weekday == 6 and today_str not in workdays:
     parts.append("🏖 最后一天")
 else:
-    work_end = os.environ.get("CCDAY_WORK_END", "18:00")
+    # 找下一个真正的休息日（非工作日且不是调休上班日）
+    work_end = os.environ.get("CCDAY_WORK_END", "19:00")
     try:
         end_h, end_m = map(int, work_end.split(":"))
     except Exception:
-        end_h, end_m = 18, 0
+        end_h, end_m = 19, 0
     now = _dt.datetime.now()
-    # 周五下班时刻
-    friday = now + _dt.timedelta(days=(4 - weekday))
-    end_dt = friday.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
-    diff = end_dt - now
-    total_hours = diff.total_seconds() / 3600
-    if total_hours <= 0:
-        parts.append("🏖 快到了!")
-    elif total_hours < 1:
-        parts.append(f"🏖 {int(diff.total_seconds()/60)}分钟")
-    else:
-        parts.append(f"🏖 还{round(total_hours)}h")
 
-# ── 出行灵感 / 段子（优先读 tip 缓存，缓存不存在时随机选）────
+    # 找下一个休息日
+    next_off = None
+    for delta in range(1, 14):
+        d = today + _dt.timedelta(days=delta)
+        if d.weekday() >= 5 and str(d) not in workdays:
+            next_off = d
+            break
+        # 节假日也算休息
+        if any(h.get("date") == str(d) for h in hdata.get("holidays", [])):
+            next_off = d
+            break
+
+    if next_off and (next_off - today).days == 1:
+        # 明天就休息，精确到小时
+        end_dt = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+        diff   = end_dt - now
+        total_hours = diff.total_seconds() / 3600
+        if total_hours <= 0:
+            parts.append("🏖 快到了!")
+        elif total_hours < 1:
+            parts.append(f"🏖 {int(diff.total_seconds()/60)}分钟")
+        else:
+            parts.append(f"🏖 还{round(total_hours)}h")
+    elif next_off:
+        days_to = (next_off - today).days
+        parts.append(f"🏖 还{days_to}天")
+    else:
+        parts.append("🏖 撑住")
+
+# ── 番茄钟 ────────────────────────────────────────────
+try:
+    pomo_file = os.path.expanduser("~/.ccday-pomodoro.json")
+    with open(pomo_file) as f:
+        pomo = json.load(f)
+    pomo_end = pomo.get("end")
+    pomo_label = pomo.get("label", "")
+    if pomo_end:
+        remaining = pomo_end - time.time()
+        if remaining > 0:
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            label = f" {pomo_label}" if pomo_label else ""
+            parts.append(f"🍅{mins}:{secs:02d}{label}")
+        else:
+            parts.append("🍅 时间到!")
+except Exception:
+    pass
+
+# ── 今日目标 ──────────────────────────────────────────
+try:
+    goal_raw = os.environ.get("CCDAY_GOAL", "")
+    if goal_raw:
+        goal_file = os.path.expanduser("~/.ccday-goal.json")
+        done = False
+        try:
+            with open(goal_file) as f:
+                gdata = json.load(f)
+            if gdata.get("date") == str(today) and gdata.get("done"):
+                done = True
+        except Exception:
+            pass
+        label = goal_raw if len(goal_raw) <= 10 else goal_raw[:9] + "…"
+        parts.append(f"✅ {label}" if done else f"🎯 {label}")
+except Exception:
+    pass
+
+# ── 出行灵感 / 段子 ───────────────────────────────────
 try:
     tip = None
     tip_cache = os.path.expanduser("~/.ccday-tip-cache.json")
@@ -199,20 +270,20 @@ try:
         pass
 
     if not tip:
-        tips = hdata.get("travel_tips", [])
+        tips  = hdata.get("travel_tips", [])
         jokes = hdata.get("jokes", [])
-        month = today.month
+        month  = today.month
         season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
         random.seed(today.toordinal())
         r = random.random()
         if jokes and r < 0.5:
             tip = random.choice(jokes)
-        elif r < 0.7 and not (weekday >= 5):
+        elif r < 0.7 and weekday < 5:
             pool = [t for t in tips if t.get("type") == "annual" and t.get("season") in (season, "all")]
-            tip = random.choice(pool)["tip"] if pool else None
+            tip  = random.choice(pool)["tip"] if pool else None
         else:
             pool = [t for t in tips if t.get("type") == "nearby"]
-            tip = random.choice(pool)["tip"] if pool else None
+            tip  = random.choice(pool)["tip"] if pool else None
 
     if tip:
         if len(tip) > 22: tip = tip[:21] + "…"
@@ -224,39 +295,77 @@ print(" ".join(parts))
 PYEOF
 )
 
+# ── Git 状态感知 ──────────────────────────────────────
+GIT=$(python3 -c "
+import subprocess, os, sys
+
+cwd = os.getcwd()
+try:
+    # 找 git 根目录
+    root = subprocess.check_output(
+        ['git', 'rev-parse', '--show-toplevel'],
+        cwd=cwd, stderr=subprocess.DEVNULL, text=True
+    ).strip()
+except Exception:
+    sys.exit(0)
+
+try:
+    status = subprocess.check_output(
+        ['git', 'status', '--porcelain'],
+        cwd=root, stderr=subprocess.DEVNULL, text=True
+    ).strip()
+    changed = len([l for l in status.splitlines() if l.strip()]) if status else 0
+except Exception:
+    changed = 0
+
+try:
+    ahead_behind = subprocess.check_output(
+        ['git', 'rev-list', '--left-right', '--count', 'HEAD...@{upstream}'],
+        cwd=root, stderr=subprocess.DEVNULL, text=True
+    ).strip().split()
+    ahead  = int(ahead_behind[0]) if len(ahead_behind) > 0 else 0
+    behind = int(ahead_behind[1]) if len(ahead_behind) > 1 else 0
+except Exception:
+    ahead = behind = 0
+
+parts = []
+if changed:  parts.append(f'📝{changed}')
+if behind:   parts.append(f'⬇{behind}')
+if ahead:    parts.append(f'⬆{ahead}')
+if parts:
+    print(' '.join(parts))
+" 2>/dev/null)
+
 # ── 旅行计划 ──────────────────────────────────────────
 if [ -n "${TRIP_NAME:-}" ] && [ -n "${TRIP_LAT:-}" ] && [ -n "${TRIP_LNG:-}" ]; then
     TRIP=$(python3 -c "
 import math, datetime, sys, random
 
-name  = sys.argv[1]
-tlat  = float(sys.argv[2])
-tlng  = float(sys.argv[3])
-hlat  = float(sys.argv[4])
-hlng  = float(sys.argv[5])
-tdate = sys.argv[6]
+name     = sys.argv[1]
+tlat     = float(sys.argv[2])
+tlng     = float(sys.argv[3])
+hlat     = float(sys.argv[4])
+hlng     = float(sys.argv[5])
+tdate    = sys.argv[6]
 tips_raw = sys.argv[7]
 
-# 球面距离（km）
 R = 6371
 lat1,lat2 = math.radians(hlat), math.radians(tlat)
 dlat = math.radians(tlat - hlat)
 dlng = math.radians(tlng - hlng)
-a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlng/2)**2
+a  = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlng/2)**2
 km = round(R * 2 * math.asin(math.sqrt(a)))
 
-# 倒计时
-today = datetime.date.today()
+today     = datetime.date.today()
 days_left = ''
 if tdate:
     try:
-        td = datetime.date.fromisoformat(tdate)
+        td   = datetime.date.fromisoformat(tdate)
         diff = (td - today).days
         if diff > 0:    days_left = f'·{diff}天后'
         elif diff == 0: days_left = '·就是今天!'
     except: pass
 
-# 注意事项轮换
 tip = ''
 if tips_raw:
     tips = [t.strip() for t in tips_raw.split(';') if t.strip()]
@@ -280,70 +389,12 @@ if [ -n "$TOKEN" ]; then
 import sys,json
 try:
     d=json.load(sys.stdin).get("data",{})
-    u=d.get("daily_usage",0)
-    l=d.get("daily_limit",0)
     p=d.get("daily_percent",0)
-    b=d.get("balance",0)
     print(f"💰{p:.0f}%")
 except: pass
 ' 2>/dev/null)
-    if [ -n "$BILLING" ]; then
-        LINE2="${LINE2:+${LINE2} │ }${BILLING}"
-    fi
+    [ -n "$BILLING" ] && LINE2="${LINE2:+${LINE2} │ }${BILLING}"
 fi
-
-# ── AI 段子生成（后台，每天一次，缓存到 ~/.ccday-joke-cache.json）──
-JOKE_CACHE="$HOME/.ccday-joke-cache.json"
-TODAY=$(date +%Y-%m-%d)
-NEED_GEN=false
-if [ ! -f "$JOKE_CACHE" ]; then
-    NEED_GEN=true
-else
-    CACHED_DATE=$(python3 -c "import json; print(json.load(open('$JOKE_CACHE')).get('date',''))" 2>/dev/null)
-    [ "$CACHED_DATE" != "$TODAY" ] && NEED_GEN=true
-fi
-
-if $NEED_GEN && [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
-    (python3 - "$JOKE_CACHE" "$TODAY" \
-      "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}" \
-      "$ANTHROPIC_AUTH_TOKEN" <<'JOKEEOF'
-import sys, json, urllib.request, urllib.error
-
-cache_path, today, base_url, token = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-base_url = base_url.rstrip('/')
-
-payload = json.dumps({
-    "model": "claude-haiku-4-5-20251001",
-    "max_tokens": 80,
-    "messages": [{
-        "role": "user",
-        "content": "写一条程序员段子或打气的话，要幽默接地气，15字以内，直接输出内容不要加引号或解释，可以带一个emoji开头"
-    }]
-}).encode()
-
-req = urllib.request.Request(
-    f"{base_url}/v1/messages",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {token}",
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-)
-try:
-    with urllib.request.urlopen(req, timeout=8) as r:
-        data = json.load(r)
-    joke = data["content"][0]["text"].strip().strip('"').strip("'")
-    if joke:
-        with open(cache_path, "w") as f:
-            json.dump({"date": today, "joke": joke}, f, ensure_ascii=False)
-except Exception:
-    pass
-JOKEEOF
-    ) &>/dev/null &
-fi
-
-[ -z "$LINE" ] && exit 0
 
 # ── 上下文占用 ────────────────────────────────────────
 CTX=$(python3 -c "
@@ -354,7 +405,6 @@ files = glob.glob(f'{proj_dir}/**/*.jsonl', recursive=True)
 if not files:
     exit()
 
-# 取5分钟内修改的文件，没有则取最近的
 now = time.time()
 recent = [f for f in files if now - os.path.getmtime(f) < 300]
 candidates = recent if recent else files
@@ -381,6 +431,9 @@ print(f'📊 ctx {pct}%')
 " 2>/dev/null)
 [ -n "$CTX" ] && LINE2="${CTX}${LINE2:+ │ ${LINE2}}"
 
-# 输出到 stdout（供 statusLine type:command 直接显示）
+# ── Git 拼入第二行 ────────────────────────────────────
+[ -n "$GIT" ] && LINE2="${LINE2:+${LINE2} │ }${GIT}"
+
+# 输出
 echo "$LINE"
 [ -n "${LINE2:-}" ] && echo "$LINE2"
