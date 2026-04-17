@@ -55,9 +55,10 @@ def send_notification(title, msg):
     try:
         sys_name = platform.system()
         if sys_name == "Darwin":
+            # 用列表传参避免引号注入
+            script = f'display notification "{msg.replace(chr(34), "")}" with title "{title}" sound name "Glass"'
             subprocess.Popen(
-                ["osascript", "-e",
-                 f'display notification "{msg}" with title "{title}" sound name "Glass"'],
+                ["osascript", "-e", script],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         elif sys_name == "Linux":
@@ -67,6 +68,22 @@ def send_notification(title, msg):
             )
     except Exception:
         pass
+
+def notify_once(key, title, msg, cooldown):
+    """用标记文件防重复弹，cooldown 秒内只弹一次"""
+    notif_file = os.path.expanduser(f"~/.ccday-notif-{key}.json")
+    try:
+        with open(notif_file) as f:
+            last_ts = json.load(f).get("ts", 0)
+    except Exception:
+        last_ts = 0
+    if time.time() - last_ts > cooldown:
+        send_notification(title, msg)
+        try:
+            with open(notif_file, "w") as f:
+                json.dump({"ts": time.time()}, f)
+        except Exception:
+            pass
 
 # ── 天气（带30分钟缓存）──────────────────────────────────
 WEATHER_CACHE = os.path.expanduser("~/.ccday-weather-cache.json")
@@ -297,7 +314,7 @@ try:
 
             if resting:
                 rest_left = int((break_duration - (time.time() - last_break)) / 60) + 1
-                parts.append(f"🧘 休息中{rest_left}min")
+                parts.append(f"🧘 休息中 {rest_left}min")
             elif elapsed >= break_interval:
                 activities = [
                     "站起来伸个懒腰", "眺望远处20秒", "做10个深蹲",
@@ -307,21 +324,7 @@ try:
                 random.seed(int(elapsed))
                 activity = random.choice(activities)
                 parts.append(f"🧘 {activity}!")
-                # 系统通知：用标记文件防同一轮重复弹
-                notif_file = os.path.expanduser("~/.ccday-break-notif.json")
-                last_notif = 0
-                try:
-                    with open(notif_file) as f:
-                        last_notif = json.load(f).get("ts", 0)
-                except Exception:
-                    pass
-                if time.time() - last_notif > break_interval * 0.9:
-                    send_notification("休息提醒", "🧘 " + activity)
-                    try:
-                        with open(notif_file, "w") as f:
-                            json.dump({"ts": time.time()}, f)
-                    except Exception:
-                        pass
+                notify_once("break", "休息提醒", "🧘 " + activity, break_interval * 0.9)
         else:
             # 不需要确认：纯按时间，到点显示5分钟自动消失（同喝水逻辑）
             day_start  = now_dt.replace(hour=break_start_h, minute=break_start_m, second=0, microsecond=0)
@@ -336,9 +339,7 @@ try:
                 random.seed(elapsed_min // (break_interval // 60))
                 activity = random.choice(activities)
                 parts.append(f"🧘 {activity}!")
-                # 系统通知：slot_min==0 时弹一次
-                if slot_min == 0:
-                    send_notification("休息提醒", "🧘 " + activity)
+                notify_once("break", "休息提醒", "🧘 " + activity, (break_interval // 60) * 60 * 0.9)
 except Exception:
     pass
 
@@ -362,9 +363,7 @@ try:
             random.seed(elapsed_min // water_interval)
             msg = random.choice(msgs)
             parts.append(f"💧 {msg}!")
-            # 系统通知：slot_min==0 时弹一次
-            if slot_min == 0:
-                send_notification("喝水提醒", "💧 " + msg)
+            notify_once("water", "喝水提醒", "💧 " + msg, water_interval * 60 * 0.9)
 except Exception:
     pass
 
