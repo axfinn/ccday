@@ -3,6 +3,8 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
+VERSION="v0.5.0"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
 SKILLS_DIR="$HOME/.claude/skills"
@@ -10,7 +12,7 @@ CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 IS_MAC=false
 [[ "$(uname)" == "Darwin" ]] && IS_MAC=true
 
-echo "📦 安装 ccday..."
+echo "📦 安装 ccday $VERSION..."
 
 # 1. 复制脚本
 mkdir -p "$INSTALL_DIR"
@@ -21,8 +23,9 @@ chmod +x "$INSTALL_DIR/ccday-label.sh"
 chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
 echo "✅ 脚本已安装到 $INSTALL_DIR"
 
-# 2. 安装 skill
+# 2. 安装 skill（清理可能存在的同名目录，避免冲突）
 mkdir -p "$SKILLS_DIR"
+rm -rf "$SKILLS_DIR/ccday"   # 旧版可能留下的目录
 cp "$SCRIPT_DIR/skills/ccday.md" "$SKILLS_DIR/"
 echo "✅ Skill 已安装: /ccday"
 
@@ -186,8 +189,11 @@ else:
 PYEOF
 fi
 
+# 6. 记录版本号
+echo "$VERSION" > "$HOME/.ccday-version"
+
 echo ""
-echo "🎉 安装完成！"
+echo "🎉 安装完成！（$VERSION）"
 echo ""
 if $IS_MAC; then
     echo "macOS 用户直接重启 Claude Code 即可，系统天气自动生效。"
@@ -201,5 +207,7 @@ else
 fi
 echo ""
 echo "状态栏效果:"
-echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🤖 让AI写段子，我摸鱼！"
+echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🧘 站起来伸个懒腰!  💧 喝杯水!"
 echo "  📊 ctx 53%  │  🗺️ 目的地 22km·2天后  │  💰72%"
+echo ""
+echo "更新方式: bash update.sh"

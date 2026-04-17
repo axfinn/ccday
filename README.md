@@ -32,6 +32,14 @@ cd ccday && bash install.sh
 
 重启 Claude Code，状态栏自动生效。
 
+## 更新
+
+```bash
+cd ccday && bash update.sh
+```
+
+自动检测远端版本，有新版本时拉取并更新脚本/skill，**不覆盖用户配置**（`~/.ccday.conf`）。
+
 ---
 
 ## 功能说明
