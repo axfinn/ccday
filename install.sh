@@ -54,6 +54,19 @@ HOME_LNG=116.38
 CCDAY_AI_JOKE=1
 CCDAY_TIP_ROTATE=5
 CCDAY_AI_JOKE_ROTATE=20
+
+# 下班时间（用于计算周末倒计时）
+CCDAY_WORK_END=19:00
+
+# 休息提醒
+CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
+CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（CONFIRM=1 时有效）
+CCDAY_BREAK_CONFIRM=1     # 1=需要主动确认，0=定时自动消失
+CCDAY_BREAK_START=09:00   # 提醒生效开始时间
+CCDAY_BREAK_END=22:00     # 提醒生效结束时间
+
+# 喝水提醒（设 0 关闭）
+CCDAY_WATER_INTERVAL=60
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -82,6 +95,19 @@ HOME_LNG=116.38
 CCDAY_AI_JOKE=1           # 启用 AI 生成段子
 CCDAY_TIP_ROTATE=5        # 每 N 次会话随机换一条 tip
 CCDAY_AI_JOKE_ROTATE=20   # 每 N 次会话用 AI 生成新段子
+
+# 下班时间（用于计算周末倒计时）
+CCDAY_WORK_END=19:00
+
+# 休息提醒
+CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
+CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（CONFIRM=1 时有效）
+CCDAY_BREAK_CONFIRM=1     # 1=需要主动确认，0=定时自动消失
+CCDAY_BREAK_START=09:00   # 提醒生效开始时间
+CCDAY_BREAK_END=22:00     # 提醒生效结束时间
+
+# 喝水提醒（设 0 关闭）
+CCDAY_WATER_INTERVAL=60
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi
