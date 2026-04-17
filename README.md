@@ -1,23 +1,25 @@
 # ccday
 
-> Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 番茄钟 · 今日目标 · Git状态 · 出行灵感
+> Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 番茄钟 · 休息/喝水提醒 · 今日目标 · Git状态 · 出行灵感
 
-**版本：v0.4.0**
+**版本：v0.5.0**
 
 在 Claude Code 底部状态栏实时显示两行信息：
 
 ```
-🌫 18° 雾  🔨 劳动节·14天  🏖 还8h  🍅24:59 写文档  🎯 完成登录模块  🌊 厦门鼓浪屿工作日人少
+🌫 18° 雾  🔨 劳动节·14天  🏖 还8h  🍅24:59 写文档  🧘 站起来伸个懒腰!  💧 喝杯水!  🎯 完成登录模块
 📊 ctx 76%  │  🗺️ 长兴岛郊野公园 22km·1天后 · 带足够的水  │  💰5%  │  📝3 ⬇1
 ```
 
-**第一行**：天气 · 节假日倒计时 · 周末倒计时 · 🍅番茄钟 · 🎯今日目标 · 出行灵感/段子  
+**第一行**：天气 · 节假日倒计时 · 周末倒计时 · 🍅番茄钟 · 🧘休息提醒 · 💧喝水提醒 · 🎯今日目标 · 出行灵感/段子
 **第二行**：📊上下文占用 · 🗺️旅行计划 · 💰每日用量 · 📝Git状态
 
 - **macOS** — open-meteo 免费天气，无需任何配置
 - **Linux** — 优先和风天气 API，无配置时自动 fallback 到 open-meteo
 - **天气缓存** — 30分钟内不重复请求，状态栏不卡顿
 - **调休感知** — 周末倒计时识别调休上班日和节假日
+- **休息提醒** — 每隔 N 分钟提醒活动，支持强确认（有倒计时）或自动消失两种模式
+- **喝水提醒** — 每隔 N 分钟自动显示 5 分钟后消失，无需确认
 
 ---
 
@@ -89,6 +91,29 @@ with open('$HOME/.ccday-goal.json', 'w') as f:
 - **每 5 次会话**（`CCDAY_TIP_ROTATE`）：从静态池随机换一条
 - **每 20 次会话**（`CCDAY_AI_JOKE_ROTATE`）：调用 `claude` CLI 根据对话内容生成专属段子
 
+### 休息提醒
+
+每隔 `CCDAY_BREAK_INTERVAL` 分钟（默认50分钟），状态栏显示 `🧘 站起来伸个懒腰!` 等随机提示。
+
+两种模式（`CCDAY_BREAK_CONFIRM`）：
+
+- **`1`（默认）强确认模式** — 需要主动确认才重置计时器，状态栏持续显示直到确认
+- **`0` 自动消失模式** — 到点显示5分钟后自动消失，无需操作
+
+```bash
+# 确认已休息（重置计时器）
+python3 -c "import json,time; open('$HOME/.ccday-break.json','w').write(json.dumps({'ts':time.time(),'resting':False}))"
+
+# 开始休息（状态栏显示倒计时）
+python3 -c "import json,time; open('$HOME/.ccday-break.json','w').write(json.dumps({'ts':time.time(),'resting':True}))"
+```
+
+用 `/ccday` skill 可一键操作。
+
+### 喝水提醒
+
+每隔 `CCDAY_WATER_INTERVAL` 分钟（默认60分钟），状态栏自动显示 `💧 喝杯水!`，持续5分钟后自动消失，无需确认。设置 `CCDAY_WATER_INTERVAL=0` 可关闭。
+
 ---
 
 ## 完整配置说明
@@ -124,6 +149,16 @@ CCDAY_WORK_END=19:00                  # 默认 19:00
 CCDAY_AI_JOKE=1                       # 启用 AI 生成段子
 CCDAY_TIP_ROTATE=5                    # 每 N 次会话随机换 tip
 CCDAY_AI_JOKE_ROTATE=20               # 每 N 次会话 AI 生成
+
+# ── 休息提醒 ────────────────────────────────────────────────
+CCDAY_BREAK_INTERVAL=50               # 每隔 N 分钟提醒休息（默认 50）
+CCDAY_BREAK_DURATION=10               # 休息时长 N 分钟（默认 10，仅 CONFIRM=1 时有效）
+CCDAY_BREAK_CONFIRM=1                 # 1=需要主动确认（有倒计时），0=定时自动消失
+CCDAY_BREAK_START=09:00               # 提醒生效开始时间（默认 09:00）
+CCDAY_BREAK_END=22:00                 # 提醒生效结束时间（默认 22:00）
+
+# ── 喝水提醒 ────────────────────────────────────────────────
+CCDAY_WATER_INTERVAL=60               # 每隔 N 分钟提醒喝水（默认 60，设 0 关闭）
 ```
 
 ---
@@ -183,11 +218,13 @@ ccday/
 | `~/.ccday-session-count` | 会话计数 |
 | `~/.ccday-pomodoro.json` | 番茄钟状态 |
 | `~/.ccday-goal.json` | 今日目标完成状态 |
+| `~/.ccday-break.json` | 休息提醒状态（CONFIRM=1 时使用） |
 
 ---
 
 ## 版本历史
 
+- **v0.5.0** — 休息提醒（可配置强确认/自动消失）、喝水提醒（自动消失）
 - **v0.4.0** — 天气缓存、调休感知、番茄钟、Git状态、今日目标
 - **v0.3.0** — tip 每5次随机换，每20次AI生成；mac天气改open-meteo
 - **v0.2.0** — 周末倒计时改为剩余工作小时数
