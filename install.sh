@@ -73,7 +73,7 @@ CCDAY_WATER_INTERVAL=60
 
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
-# CCDAY_BILLING_BUDGET=50 # 设置每日预算（元），有值时显示"💰余X.X¥"，不设则显示百分比
+CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -118,7 +118,7 @@ CCDAY_WATER_INTERVAL=60
 
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
-# CCDAY_BILLING_BUDGET=50 # 设置每日预算（元），有值时显示"💰余X.X¥"，不设则显示百分比
+CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi
