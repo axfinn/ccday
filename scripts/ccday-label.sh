@@ -29,6 +29,8 @@ QWEATHER_KID="${QWEATHER_KID:-}"
 QWEATHER_PROJECT_ID="${QWEATHER_PROJECT_ID:-}"
 QWEATHER_PRIVATE_KEY="${QWEATHER_PRIVATE_KEY:-$HOME/.ccday-private.pem}"
 QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"  # 默认上海
+CCDAY_WORK_END="${CCDAY_WORK_END:-19:00}"
+export CCDAY_WORK_END
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -161,13 +163,30 @@ except Exception:
     pass
 
 # ── 周末倒计时 ────────────────────────────────────────
+import datetime as _dt
 weekday = today.weekday()
 if weekday == 5:
     parts.append("🏖 休息!")
 elif weekday == 6:
     parts.append("🏖 最后一天")
 else:
-    parts.append(f"🏖 {5-weekday}天")
+    work_end = os.environ.get("CCDAY_WORK_END", "18:00")
+    try:
+        end_h, end_m = map(int, work_end.split(":"))
+    except Exception:
+        end_h, end_m = 18, 0
+    now = _dt.datetime.now()
+    # 周五下班时刻
+    friday = now + _dt.timedelta(days=(4 - weekday))
+    end_dt = friday.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+    diff = end_dt - now
+    total_hours = diff.total_seconds() / 3600
+    if total_hours <= 0:
+        parts.append("🏖 快到了!")
+    elif total_hours < 1:
+        parts.append(f"🏖 {int(diff.total_seconds()/60)}分钟")
+    else:
+        parts.append(f"🏖 还{round(total_hours)}h")
 
 # ── 出行灵感 / 段子（优先读 tip 缓存，缓存不存在时随机选）────
 try:
