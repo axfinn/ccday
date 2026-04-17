@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.5.2"
+VERSION="v0.5.3"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -70,6 +70,10 @@ CCDAY_BREAK_END=22:00     # 提醒生效结束时间
 
 # 喝水提醒（设 0 关闭）
 CCDAY_WATER_INTERVAL=60
+
+# 剩余金额显示
+CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
+# CCDAY_BILLING_BUDGET=50 # 设置每日预算（元），有值时显示"💰余X.X¥"，不设则显示百分比
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -111,6 +115,10 @@ CCDAY_BREAK_END=22:00     # 提醒生效结束时间
 
 # 喝水提醒（设 0 关闭）
 CCDAY_WATER_INTERVAL=60
+
+# 剩余金额显示
+CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
+# CCDAY_BILLING_BUDGET=50 # 设置每日预算（元），有值时显示"💰余X.X¥"，不设则显示百分比
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi

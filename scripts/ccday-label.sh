@@ -468,14 +468,20 @@ fi
 
 # ── Billing（bilibili 内网）────────────────────────────
 TOKEN="${ANTHROPIC_AUTH_TOKEN:-}"
-if [ -n "$TOKEN" ]; then
+if [ -n "$TOKEN" ] && [ "${CCDAY_BILLING:-1}" = "1" ]; then
     BILLING=$(curl -s --max-time 3 "http://api-ai-coding.bilibili.co/api/v1/billing/usage" \
       -H "Authorization: Bearer $TOKEN" 2>/dev/null | /usr/bin/python3 -c '
 import sys,json
 try:
     d=json.load(sys.stdin).get("data",{})
     p=d.get("daily_percent",0)
-    print(f"💰{p:.0f}%")
+    budget=float("'"${CCDAY_BILLING_BUDGET:-0}"'")
+    if budget > 0:
+        used=d.get("daily_used",0)
+        remain=budget-used
+        print(f"💰余{remain:.1f}¥")
+    else:
+        print(f"💰{p:.0f}%")
 except: pass
 ' 2>/dev/null)
     [ -n "$BILLING" ] && LINE2="${LINE2:+${LINE2} │ }${BILLING}"
