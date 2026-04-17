@@ -101,7 +101,7 @@ with open('$HOME/.ccday-goal.json', 'w') as f:
 
 ### 休息提醒
 
-每隔 `CCDAY_BREAK_INTERVAL` 分钟（默认50分钟），状态栏显示 `🧘 站起来伸个懒腰!` 等随机提示。
+每隔 `CCDAY_BREAK_INTERVAL` 分钟（默认50分钟），状态栏显示 `🧘 站起来伸个懒腰!` 等随机提示，同时触发系统通知弹窗（macOS / Linux）。
 
 两种模式（`CCDAY_BREAK_CONFIRM`）：
 
@@ -120,7 +120,7 @@ python3 -c "import json,time; open('$HOME/.ccday-break.json','w').write(json.dum
 
 ### 喝水提醒
 
-每隔 `CCDAY_WATER_INTERVAL` 分钟（默认60分钟），状态栏自动显示 `💧 喝杯水!`，持续5分钟后自动消失，无需确认。设置 `CCDAY_WATER_INTERVAL=0` 可关闭。
+每隔 `CCDAY_WATER_INTERVAL` 分钟（默认60分钟），状态栏自动显示 `💧 喝杯水!`，持续5分钟后自动消失，同时触发系统通知弹窗。设置 `CCDAY_WATER_INTERVAL=0` 可关闭。
 
 ---
 
@@ -228,11 +228,13 @@ ccday/
 | `~/.ccday-pomodoro.json` | 番茄钟状态 |
 | `~/.ccday-goal.json` | 今日目标完成状态 |
 | `~/.ccday-break.json` | 休息提醒状态（CONFIRM=1 时使用） |
+| `~/.ccday-break-notif.json` | 休息系统通知去重标记 |
 
 ---
 
 ## 版本历史
 
+- **v0.5.4** — 休息/喝水提醒触发系统通知弹窗（macOS osascript / Linux notify-send），修复 emoji 与数字间距
 - **v0.5.3** — 新增 `CCDAY_BILLING` 开关和 `CCDAY_BILLING_BUDGET` 预算配置，支持显示剩余金额
 - **v0.5.2** — 修复 macOS open-meteo 经纬度顺序错误导致天气获取失败
 - **v0.5.1** — 修复 `/ccday` skill 找不到（目录结构 + SKILL.md 大写）、支持 `bash update.sh` 一键更新
