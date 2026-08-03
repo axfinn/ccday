@@ -1,16 +1,25 @@
 #!/bin/bash
-# ccday-label.sh — 天气 + 节假日 + 周末 + 番茄钟 + 休息/喝水提醒 + Git + 目标 + 旅行计划 + 上下文
+# ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.5.5
+# 版本: v0.6.0
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
 #   QWEATHER_LOCATION   经纬度，如 121.47,31.23
-#   CCDAY_WORK_END      下班时间，默认 19:00
+#   CCDAY_WORK_START    上班时间，默认 10:00
+#   CCDAY_WORK_END      下班时间，默认 19:30
 #   CCDAY_GOAL          今日目标，如 "完成登录模块"
 #   TRIP_*              旅行计划（可选）
 
 HOLIDAYS_JSON="$(dirname "$0")/holidays.json"
+
+# Claude Code 通过 stdin 传入会话 JSON（transcript_path / model / cost）。
+# 手动在终端运行时 stdin 是 tty，跳过读取避免阻塞。
+CCDAY_STDIN=""
+if [ ! -t 0 ]; then
+    CCDAY_STDIN=$(timeout 0.3 cat 2>/dev/null || true)
+fi
+export CCDAY_STDIN
 
 for f in "$HOME/.ccday.conf" "$HOME/.ccday.env"; do
     [ -f "$f" ] && source "$f" && break
@@ -24,7 +33,9 @@ QWEATHER_KID="${QWEATHER_KID:-}"
 QWEATHER_PROJECT_ID="${QWEATHER_PROJECT_ID:-}"
 QWEATHER_PRIVATE_KEY="${QWEATHER_PRIVATE_KEY:-$HOME/.ccday-private.pem}"
 QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"
-CCDAY_WORK_END="${CCDAY_WORK_END:-19:00}"
+CCDAY_WORK_START="${CCDAY_WORK_START:-10:00}"
+CCDAY_WORK_END="${CCDAY_WORK_END:-19:30}"
+CCDAY_OFFWORK="${CCDAY_OFFWORK:-1}"               # 1=显示下班倒计时，0=隐藏
 CCDAY_GOAL="${CCDAY_GOAL:-}"
 CCDAY_BREAK_INTERVAL="${CCDAY_BREAK_INTERVAL:-50}"
 CCDAY_BREAK_DURATION="${CCDAY_BREAK_DURATION:-10}"
@@ -32,7 +43,8 @@ CCDAY_BREAK_START="${CCDAY_BREAK_START:-09:00}"
 CCDAY_BREAK_END="${CCDAY_BREAK_END:-22:00}"
 CCDAY_BREAK_CONFIRM="${CCDAY_BREAK_CONFIRM:-1}"   # 1=需要主动确认，0=定时自动消失（同喝水）
 CCDAY_WATER_INTERVAL="${CCDAY_WATER_INTERVAL:-60}"
-export CCDAY_WORK_END CCDAY_GOAL CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
+export CCDAY_WORK_START CCDAY_WORK_END CCDAY_OFFWORK CCDAY_GOAL
+export CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -286,8 +298,24 @@ import datetime as _dt
 weekday  = today.weekday()
 today_str = str(today)
 
-# 判断今天是否实际需要上班（调休）
+# 判断今天是否实际需要上班（调休上班日 / 法定节假日）
 is_extra_workday = today_str in workdays
+is_holiday_today = any(h.get("date") == today_str for h in hdata.get("holidays", []))
+is_workday_today = is_extra_workday or (weekday < 5 and not is_holiday_today)
+
+def parse_hhmm(raw, dft_h, dft_m):
+    try:
+        h, m = raw.split(":")
+        return int(h), int(m)
+    except Exception:
+        return dft_h, dft_m
+
+def fmt_span(seconds):
+    """秒 → 3h55m / 45m，用于倒计时展示"""
+    mins = int(seconds // 60)
+    if mins >= 60:
+        return f"{mins // 60}h{mins % 60:02d}m"
+    return f"{mins}m"
 
 if weekday == 5 and today_str not in workdays:
     parts.append("🏖 休息!")
@@ -295,11 +323,7 @@ elif weekday == 6 and today_str not in workdays:
     parts.append("🏖 最后一天")
 else:
     # 找下一个真正的休息日（非工作日且不是调休上班日）
-    work_end = os.environ.get("CCDAY_WORK_END", "19:00")
-    try:
-        end_h, end_m = map(int, work_end.split(":"))
-    except Exception:
-        end_h, end_m = 19, 0
+    end_h, end_m = parse_hhmm(os.environ.get("CCDAY_WORK_END", "19:30"), 19, 30)
     now = _dt.datetime.now()
 
     # 找下一个休息日
@@ -330,6 +354,43 @@ else:
         parts.append(f"🏖 还{days_to}天")
     else:
         parts.append("🏖 撑住")
+
+# ── 下班倒计时 ────────────────────────────────────────
+# 只在工作日显示：上班前 🕘 待上班、工作中 🕔 剩余、过点后 🌙 加班时长
+try:
+    if os.environ.get("CCDAY_OFFWORK", "1") == "1" and is_workday_today:
+        ws_h, ws_m = parse_hhmm(os.environ.get("CCDAY_WORK_START", "10:00"), 10, 0)
+        we_h, we_m = parse_hhmm(os.environ.get("CCDAY_WORK_END",   "19:30"), 19, 30)
+        now_w    = _dt.datetime.now()
+        start_dt = now_w.replace(hour=ws_h, minute=ws_m, second=0, microsecond=0)
+        end_dt   = now_w.replace(hour=we_h, minute=we_m, second=0, microsecond=0)
+        if end_dt <= start_dt:
+            # 跨天班（如 22:00→06:00）：凌晨还在昨天开始的这一班里
+            if now_w < end_dt:
+                start_dt -= _dt.timedelta(days=1)
+            else:
+                end_dt += _dt.timedelta(days=1)
+
+        if now_w < start_dt:
+            parts.append(f"🕘 待上班 {fmt_span((start_dt - now_w).total_seconds())}")
+        elif now_w < end_dt:
+            left  = (end_dt - now_w).total_seconds()
+            total = (end_dt - start_dt).total_seconds()
+            # 最后半小时给个更醒目的提示
+            icon  = "🔥" if left <= 1800 else "🕔"
+            done_pct = int((total - left) / total * 100) if total > 0 else 0
+            parts.append(f"{icon} 下班 {fmt_span(left)}·{done_pct}%")
+        else:
+            over = (now_w - end_dt).total_seconds()
+            if over < 300:
+                parts.append("🎉 下班了!")
+            else:
+                parts.append(f"🌙 加班 {fmt_span(over)}")
+            # 超过下班点，每 30 分钟提醒一次收工
+            notify_once("offwork", "该下班了",
+                        "🌙 已加班 " + fmt_span(over) + "，收个尾吧", 1800)
+except Exception:
+    pass
 
 # ── 番茄钟 ────────────────────────────────────────────
 try:
@@ -388,7 +449,8 @@ try:
                     "走动走动", "活动一下脖子", "闭眼休息一下",
                     "去趟洗手间", "做几个肩膀绕环",
                 ]
-                random.seed(int(elapsed))
+                # 用上次休息时刻作为种子，同一轮提醒内文案固定，不随刷新闪烁
+                random.seed(int(last_break // 60))
                 activity = random.choice(activities)
                 parts.append(f"🧘 {activity}!")
                 notify_once("break", "休息提醒", "🧘 " + activity, break_interval * 0.9)
@@ -574,50 +636,95 @@ if days_left or not tdate:
     [ -n "$TRIP" ] && LINE2="${TRIP}"
 fi
 
-# ── Billing（bilibili 内网）────────────────────────────
+# ── Billing（bilibili 内网，带缓存）────────────────────
+# 状态栏每次刷新都打内网接口太浪费，缓存 CCDAY_BILLING_TTL 秒（默认 300）
 TOKEN="${ANTHROPIC_AUTH_TOKEN:-}"
 if [ -n "$TOKEN" ] && [ "${CCDAY_BILLING:-1}" = "1" ]; then
-    BILLING=$(curl -s --max-time 3 "http://api-ai-coding.bilibili.co/api/v1/billing/usage" \
-      -H "Authorization: Bearer $TOKEN" 2>/dev/null | /usr/bin/python3 -c '
-import sys,json
+    BILLING_CACHE="$HOME/.ccday-billing-cache.json"
+    BILLING_TTL="${CCDAY_BILLING_TTL:-300}"
+    BILLING=$(/usr/bin/python3 -c '
+import sys, json, os, time
+cache, ttl = sys.argv[1], int(sys.argv[2])
 try:
-    d=json.load(sys.stdin).get("data",{})
-    p=d.get("daily_percent",0)
-    budget=float("'"${CCDAY_BILLING_BUDGET:-0}"'")
+    with open(cache) as f:
+        d = json.load(f)
+    if time.time() - d.get("ts", 0) < ttl:
+        print(d.get("text", ""))
+except Exception:
+    pass
+' "$BILLING_CACHE" "$BILLING_TTL" 2>/dev/null)
+
+    if [ -z "$BILLING" ]; then
+        BILLING=$(curl -s --max-time 3 "http://api-ai-coding.bilibili.co/api/v1/billing/usage" \
+          -H "Authorization: Bearer $TOKEN" 2>/dev/null | /usr/bin/python3 -c '
+import sys, json, time
+cache, budget_raw = sys.argv[1], sys.argv[2]
+try:
+    d = json.load(sys.stdin).get("data", {})
+    budget = float(budget_raw or 0)
     if budget > 0:
-        used=d.get("daily_used",0)
-        remain=budget-used
-        print(f"💰余{remain:.1f}¥")
+        remain = budget - d.get("daily_used", 0)
+        text = "💰余{:.1f}¥".format(remain)
     else:
-        print(f"💰{p:.0f}%")
-except: pass
-' 2>/dev/null)
+        text = "💰{:.0f}%".format(d.get("daily_percent", 0))
+    print(text)
+    with open(cache, "w") as f:
+        json.dump({"ts": time.time(), "text": text}, f)
+except Exception:
+    pass
+' "$BILLING_CACHE" "${CCDAY_BILLING_BUDGET:-0}" 2>/dev/null)
+    fi
     [ -n "$BILLING" ] && LINE2="${LINE2:+${LINE2} │ }${BILLING}"
 fi
 
 # ── 上下文占用 ────────────────────────────────────────
+# 优先用 Claude Code 通过 stdin 传入的 transcript_path 和 model.id：
+# 前者定位当前会话（而非最近改动的任意会话），后者决定窗口大小（1M / 200k）。
 CTX=$(python3 -c "
 import json, os, glob, time
 
-proj_dir = os.path.expanduser('~/.claude/projects')
-files = glob.glob(f'{proj_dir}/**/*.jsonl', recursive=True)
-if not files:
-    exit()
+WINDOW_1M   = 1000000
+WINDOW_200K = 200000
 
-now = time.time()
-recent = [f for f in files if now - os.path.getmtime(f) < 300]
-candidates = recent if recent else files
-latest = max(candidates, key=os.path.getmtime)
+transcript, model_id = None, ''
+raw = os.environ.get('CCDAY_STDIN', '')
+if raw:
+    try:
+        payload    = json.loads(raw)
+        transcript = payload.get('transcript_path') or None
+        model_id   = (payload.get('model') or {}).get('id', '') or ''
+    except Exception:
+        pass
+
+if transcript and not os.path.exists(os.path.expanduser(transcript)):
+    transcript = None
+
+if transcript:
+    latest = os.path.expanduser(transcript)
+else:
+    # 回退：扫描 projects 目录挑最近修改的会话
+    files = glob.glob(os.path.expanduser('~/.claude/projects') + '/**/*.jsonl', recursive=True)
+    if not files:
+        exit()
+    now    = time.time()
+    recent = [f for f in files if now - os.path.getmtime(f) < 300]
+    latest = max(recent or files, key=os.path.getmtime)
 
 usage = None
-with open(latest) as f:
-    for line in f:
-        try:
-            d = json.loads(line)
-            u = d.get('message', {}).get('usage')
-            if u and u.get('input_tokens'):
-                usage = u
-        except: pass
+try:
+    with open(latest) as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+                u = d.get('message', {}).get('usage')
+                if u and u.get('input_tokens'):
+                    usage = u
+                if not model_id:
+                    model_id = d.get('message', {}).get('model', '') or model_id
+            except Exception:
+                pass
+except Exception:
+    exit()
 
 if not usage:
     exit()
@@ -625,8 +732,12 @@ if not usage:
 total = (usage.get('input_tokens', 0)
        + usage.get('cache_read_input_tokens', 0)
        + usage.get('cache_creation_input_tokens', 0))
-pct = round(total / 200000 * 100)
-print(f'📊 ctx {pct}%')
+
+# 模型 ID 带 1m 标记的是 100 万上下文窗口，如 claude-opus-5[1m]
+window = WINDOW_1M if '1m' in model_id.lower() else WINDOW_200K
+pct    = round(total / window * 100)
+tag    = '1M' if window == WINDOW_1M else ''
+print(f'📊 ctx {pct}%{tag and \" \" + tag}')
 " 2>/dev/null)
 [ -n "$CTX" ] && LINE2="${CTX}${LINE2:+ │ ${LINE2}}"
 

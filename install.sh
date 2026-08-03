@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.5.5"
+VERSION="v0.6.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -58,8 +58,10 @@ CCDAY_AI_JOKE=1
 CCDAY_TIP_ROTATE=5
 CCDAY_AI_JOKE_ROTATE=20
 
-# 下班时间（用于计算周末倒计时）
-CCDAY_WORK_END=19:00
+# 上下班时间（下班倒计时 + 周末倒计时，支持跨天班）
+CCDAY_WORK_START=10:00
+CCDAY_WORK_END=19:30
+CCDAY_OFFWORK=1           # 1=显示下班倒计时，0=隐藏
 
 # 休息提醒
 CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
@@ -74,6 +76,7 @@ CCDAY_WATER_INTERVAL=60
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
 CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
+CCDAY_BILLING_TTL=300     # 用量接口缓存秒数
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -103,8 +106,10 @@ CCDAY_AI_JOKE=1           # 启用 AI 生成段子
 CCDAY_TIP_ROTATE=5        # 每 N 次会话随机换一条 tip
 CCDAY_AI_JOKE_ROTATE=20   # 每 N 次会话用 AI 生成新段子
 
-# 下班时间（用于计算周末倒计时）
-CCDAY_WORK_END=19:00
+# 上下班时间（下班倒计时 + 周末倒计时，支持跨天班）
+CCDAY_WORK_START=10:00
+CCDAY_WORK_END=19:30
+CCDAY_OFFWORK=1           # 1=显示下班倒计时，0=隐藏
 
 # 休息提醒
 CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
@@ -119,6 +124,7 @@ CCDAY_WATER_INTERVAL=60
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
 CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
+CCDAY_BILLING_TTL=300     # 用量接口缓存秒数
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi
@@ -215,7 +221,7 @@ else
 fi
 echo ""
 echo "状态栏效果:"
-echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🧘 站起来伸个懒腰!  💧 喝杯水!"
+echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🕔 下班 3h45m·60%  🧘 站起来伸个懒腰!  💧 喝杯水!"
 echo "  📊 ctx 53%  │  🗺️ 目的地 22km·2天后  │  💰72%"
 echo ""
 echo "更新方式: bash update.sh"
