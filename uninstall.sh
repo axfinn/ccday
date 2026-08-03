@@ -14,10 +14,14 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "✅ 已删除 $INSTALL_DIR"
 fi
 
-# 2. 删除 skill
+# 2. 删除 skill（v0.4+ 是目录形式，旧版是单文件，两种都清）
+if [ -d "$SKILLS_DIR/ccday" ]; then
+    rm -rf "$SKILLS_DIR/ccday"
+    echo "✅ 已删除 skill: /ccday"
+fi
 if [ -f "$SKILLS_DIR/ccday.md" ]; then
     rm "$SKILLS_DIR/ccday.md"
-    echo "✅ 已删除 skill: /ccday"
+    echo "✅ 已删除旧版 skill 单文件"
 fi
 
 # 3. 从 settings.json 移除 statusLine 和 Stop hook
@@ -67,7 +71,29 @@ if changed:
 PYEOF
 fi
 
+# 4. 清理运行时缓存（保留用户配置和私钥）
+CACHES=(
+    "$HOME/.ccday-tip-cache.json"
+    "$HOME/.ccday-weather-cache.json"
+    "$HOME/.ccday-billing-cache.json"
+    "$HOME/.ccday-break.json"
+    "$HOME/.ccday-pomodoro.json"
+    "$HOME/.ccday-goal.json"
+    "$HOME/.ccday-session-count"
+    "$HOME/.ccday-version"
+    "$HOME/.ccday-break-alert.html"
+)
+REMOVED=0
+for f in "${CACHES[@]}"; do
+    [ -e "$f" ] && rm -f "$f" && REMOVED=$((REMOVED + 1))
+done
+# 通知去重标记文件（数量不定：break/water/meal-lunch/meal-dinner…）
+for f in "$HOME"/.ccday-notif-*.json; do
+    [ -e "$f" ] && rm -f "$f" && REMOVED=$((REMOVED + 1))
+done
+[ "$REMOVED" -gt 0 ] && echo "✅ 已清理 $REMOVED 个运行时缓存文件"
+
 echo ""
 echo "✅ 卸载完成"
-echo "ℹ️  配置文件 ~/.ccday.conf 和段子缓存 ~/.ccday-joke-cache.json 已保留，如需删除请手动执行："
-echo "   rm ~/.ccday.conf ~/.ccday-joke-cache.json"
+echo "ℹ️  以下文件已保留（含你的个人配置，如需删除请手动执行）："
+echo "   rm ~/.ccday.conf ~/.ccday-private.pem"

@@ -2,7 +2,7 @@
 
 > Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 下班倒计时 · 番茄钟 · 休息/喝水/饭点提醒 · 今日目标 · Git状态 · 出行灵感
 
-**版本：v0.6.2**
+**版本：v0.6.3**
 
 在 Claude Code 底部状态栏实时显示两行信息：
 
@@ -41,7 +41,11 @@ cd ccday && bash install.sh
 cd ccday && bash update.sh
 ```
 
-自动检测远端版本，有新版本时拉取并更新脚本/skill，**不覆盖用户配置**（`~/.ccday.conf`）。
+拉取远端新版本并更新脚本/skill，**不覆盖用户配置**（`~/.ccday.conf`）。
+
+即使远端没有新提交，只要已安装的文件和仓库不一致（改过本地代码、装了一半），
+也会重新安装；工作区有未提交改动或有未推送的提交时**不会** `git pull` 覆盖你的代码。
+另外会检查 `settings.json` 的挂载点是否齐全，缺 statusLine / Stop hook 时提示跑 `install.sh`。
 
 ---
 
@@ -292,6 +296,11 @@ ccday/
 | `~/.ccday-goal.json` | 今日目标完成状态 |
 | `~/.ccday-break.json` | 休息提醒状态（CONFIRM=1 时使用） |
 | `~/.ccday-billing-cache.json` | 用量接口缓存（默认5分钟） |
+| `~/.ccday-notif-*.json` | 通知去重标记（break/water/meal-*） |
+| `~/.ccday-version` | 已安装版本号 |
+| `~/.ccday-private.pem` | 和风天气私钥（用户自备） |
+
+`uninstall.sh` 会清理上表中的缓存类文件，只保留 `~/.ccday.conf` 和 `~/.ccday-private.pem`。
 | `~/.ccday-notif-break.json` | 休息系统通知去重标记 |
 | `~/.ccday-notif-water.json` | 喝水系统通知去重标记 |
 | `~/.ccday-notif-offwork.json` | 下班/加班系统通知去重标记 |
@@ -302,6 +311,7 @@ ccday/
 
 ## 版本历史
 
+- **v0.6.3** — 修复 `uninstall.sh` 删不掉 skill（还在找 v0.3 的单文件路径）；`update.sh` 支持"远端无新提交但本地已安装版本过期"的情况，并检查 settings.json 挂载点是否齐全；卸载时清理运行时缓存
 - **v0.6.2** — 🎒 周末灵感改为按 `HOME_LAT/LNG` 给具体城市+车程+玩法（内置 10 个城市圈），删掉"高铁2小时内的城市""携程比价"这类无信息量的空话
 - **v0.6.1** — 🍚 午饭/晚饭提醒（默认 12:00 / 18:00，可留空关闭）；Git 状态新增 `✓N` 今日提交数（仅本人）
 - **v0.6.0** — 🕔 下班倒计时（默认 19:30，含进度/加班/跨天班）；ctx 按模型窗口自适应（1M/200k）并改用 stdin 的 transcript_path 定位当前会话；billing 加 5 分钟缓存；修复休息提示语每次刷新都变的问题
@@ -321,6 +331,9 @@ ccday/
 ```bash
 bash uninstall.sh
 ```
+
+移除脚本、skill、`settings.json` 里的 statusLine 和 Stop hook，清理运行时缓存。
+保留 `~/.ccday.conf` 和 `~/.ccday-private.pem`，需要彻底删除时手动 `rm`。
 
 ## License
 

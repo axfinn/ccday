@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.6.2"
+VERSION="v0.6.3"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
