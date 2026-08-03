@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.6.0"
+VERSION="v0.6.1"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -73,6 +73,11 @@ CCDAY_BREAK_END=22:00     # 提醒生效结束时间
 # 喝水提醒（设 0 关闭）
 CCDAY_WATER_INTERVAL=60
 
+# 饭点提醒（留空关闭）
+CCDAY_LUNCH=12:00
+CCDAY_DINNER=18:00
+CCDAY_MEAL_WINDOW=30      # 到点后持续显示 N 分钟
+
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
 CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
@@ -120,6 +125,11 @@ CCDAY_BREAK_END=22:00     # 提醒生效结束时间
 
 # 喝水提醒（设 0 关闭）
 CCDAY_WATER_INTERVAL=60
+
+# 饭点提醒（留空关闭）
+CCDAY_LUNCH=12:00
+CCDAY_DINNER=18:00
+CCDAY_MEAL_WINDOW=30      # 到点后持续显示 N 分钟
 
 # 剩余金额显示
 CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏

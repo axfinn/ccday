@@ -1,7 +1,7 @@
 #!/bin/bash
-# ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水提醒 + Git + 目标 + 旅行计划 + 上下文
+# ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.0
+# 版本: v0.6.1
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -43,8 +43,12 @@ CCDAY_BREAK_START="${CCDAY_BREAK_START:-09:00}"
 CCDAY_BREAK_END="${CCDAY_BREAK_END:-22:00}"
 CCDAY_BREAK_CONFIRM="${CCDAY_BREAK_CONFIRM:-1}"   # 1=需要主动确认，0=定时自动消失（同喝水）
 CCDAY_WATER_INTERVAL="${CCDAY_WATER_INTERVAL:-60}"
+CCDAY_LUNCH="${CCDAY_LUNCH:-12:00}"               # 午饭提醒时间，留空关闭
+CCDAY_DINNER="${CCDAY_DINNER:-18:00}"             # 晚饭提醒时间，留空关闭
+CCDAY_MEAL_WINDOW="${CCDAY_MEAL_WINDOW:-30}"      # 饭点提醒持续 N 分钟
 export CCDAY_WORK_START CCDAY_WORK_END CCDAY_OFFWORK CCDAY_GOAL
 export CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
+export CCDAY_LUNCH CCDAY_DINNER CCDAY_MEAL_WINDOW
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -496,6 +500,33 @@ try:
 except Exception:
     pass
 
+# ── 饭点提醒 ──────────────────────────────────────────
+# 到点后持续 CCDAY_MEAL_WINDOW 分钟显示，超时自动消失（同喝水逻辑）
+try:
+    meal_window = int(os.environ.get("CCDAY_MEAL_WINDOW", "30"))
+    meals = [
+        ("lunch",  os.environ.get("CCDAY_LUNCH",  "12:00"), "🍚", "午饭",
+         ["去吃午饭", "该干饭了", "别饿着写代码", "先吃饭再改 bug"]),
+        ("dinner", os.environ.get("CCDAY_DINNER", "18:00"), "🍜", "晚饭",
+         ["去吃晚饭", "该干饭了", "别空着肚子加班", "先吃饭，bug 不会跑"]),
+    ]
+    now_m = _dt.datetime.now()
+    for key, raw, icon, label, msgs in meals:
+        if not raw.strip():
+            continue
+        mh, mm = parse_hhmm(raw, -1, -1)
+        if mh < 0:
+            continue
+        meal_dt = now_m.replace(hour=mh, minute=mm, second=0, microsecond=0)
+        late_min = (now_m - meal_dt).total_seconds() / 60
+        if 0 <= late_min < meal_window:
+            random.seed(today.toordinal() + mh)
+            msg = random.choice(msgs)
+            parts.append(f"{icon} {msg}!")
+            notify_once(f"meal-{key}", f"{label}时间", f"{icon} {msg}", meal_window * 60)
+except Exception:
+    pass
+
 # ── 今日目标 ──────────────────────────────────────────
 try:
     goal_raw = os.environ.get("CCDAY_GOAL", "")
@@ -583,8 +614,25 @@ try:
 except Exception:
     ahead = behind = 0
 
+# 今日提交数：只统计当前用户，避免把同事的提交算进来
+try:
+    email = subprocess.check_output(
+        ['git', 'config', 'user.email'],
+        cwd=root, stderr=subprocess.DEVNULL, text=True
+    ).strip()
+    cmd = ['git', 'log', '--since=midnight', '--oneline']
+    if email:
+        cmd.append(f'--author={email}')
+    out = subprocess.check_output(
+        cmd, cwd=root, stderr=subprocess.DEVNULL, text=True
+    ).strip()
+    commits = len([l for l in out.splitlines() if l.strip()]) if out else 0
+except Exception:
+    commits = 0
+
 parts = []
 if changed:  parts.append(f'📝 {changed}')
+if commits:  parts.append(f'✓ {commits}')
 if behind:   parts.append(f'⬇ {behind}')
 if ahead:    parts.append(f'⬆ {ahead}')
 if parts:

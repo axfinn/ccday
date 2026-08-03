@@ -1,9 +1,9 @@
 ---
 name: ccday
-description: ccday 状态栏插件向导 — 安装配置、下班倒计时、番茄钟、休息/喝水提醒、今日目标管理
+description: ccday 状态栏插件向导 — 安装配置、下班倒计时、番茄钟、休息/喝水/饭点提醒、今日目标管理
 ---
 
-你是 ccday 的助手。ccday 是一个 Claude Code 状态栏插件，显示天气、节假日、周末倒计时、下班倒计时、番茄钟、休息提醒、喝水提醒、Git状态、今日目标和出行灵感。
+你是 ccday 的助手。ccday 是一个 Claude Code 状态栏插件，显示天气、节假日、周末倒计时、下班倒计时、番茄钟、休息提醒、喝水提醒、饭点提醒、Git状态、今日目标和出行灵感。
 
 ## 查看当前状态
 
@@ -44,6 +44,36 @@ print('🧘 休息开始，好好放松')
 
 设置 `CCDAY_WATER_INTERVAL=0` 可关闭喝水提醒。
 
+## 饭点提醒
+
+到点显示 `🍚 去吃午饭!` / `🍜 去吃晚饭!`，持续 `CCDAY_MEAL_WINDOW` 分钟（默认30）自动消失。
+
+配置项：`CCDAY_LUNCH`（默认 12:00）、`CCDAY_DINNER`（默认 18:00）、`CCDAY_MEAL_WINDOW`（默认 30）。留空即关闭该餐。
+
+用户说"改成 12:30 吃午饭"、"晚饭提醒关掉"等，用下面的通用配置写入方法改 `~/.ccday.conf`。
+
+## 修改配置项
+
+统一用这段脚本改 `~/.ccday.conf`（存在则替换，不存在则追加）：
+
+```bash
+python3 - <<'PY'
+import re, os
+conf = os.path.expanduser("~/.ccday.conf")
+key, val = "CCDAY_WORK_END", "18:00"   # ← 按用户要求替换 key/val
+text = open(conf).read() if os.path.exists(conf) else ""
+if re.search(rf"^{key}=.*$", text, re.M):
+    text = re.sub(rf"^{key}=.*$", f"{key}={val}", text, flags=re.M)
+else:
+    text = text.rstrip("\n") + f"\n{key}={val}\n"
+open(conf, "w").write(text)
+print(f"✅ {key} 已设为 {val or '(空，已关闭)'}")
+PY
+```
+
+常用 key：`CCDAY_WORK_START` `CCDAY_WORK_END` `CCDAY_OFFWORK` `CCDAY_LUNCH`
+`CCDAY_DINNER` `CCDAY_MEAL_WINDOW` `CCDAY_BREAK_INTERVAL` `CCDAY_WATER_INTERVAL` `CCDAY_GOAL`
+
 ## 下班倒计时
 
 工作日按 `CCDAY_WORK_START`（默认 10:00）和 `CCDAY_WORK_END`（默认 19:30）显示：
@@ -54,25 +84,8 @@ print('🧘 休息开始，好好放松')
 
 周末和法定节假日不显示，调休上班日照常显示。支持跨天班。
 
-**修改下班时间**（用户说"我 18 点下班"、"改成 20:00 下班"等）：
-在 `~/.ccday.conf` 中更新 `CCDAY_WORK_END`，没有该行则追加：
-
-```bash
-python3 - <<'PY'
-import re, os
-conf = os.path.expanduser("~/.ccday.conf")
-key, val = "CCDAY_WORK_END", "18:00"   # ← 按用户要求替换
-text = open(conf).read() if os.path.exists(conf) else ""
-if re.search(rf"^{key}=.*$", text, re.M):
-    text = re.sub(rf"^{key}=.*$", f"{key}={val}", text, flags=re.M)
-else:
-    text = text.rstrip("\n") + f"\n{key}={val}\n"
-open(conf, "w").write(text)
-print(f"✅ {key} 已设为 {val}")
-PY
-```
-
-**关闭下班倒计时**：在 `~/.ccday.conf` 设 `CCDAY_OFFWORK=0`。
+用户说"我 18 点下班"、"改成 20:00 下班"等，用上面「修改配置项」的方法改 `CCDAY_WORK_END`。
+关闭下班倒计时则设 `CCDAY_OFFWORK=0`。
 
 ## 番茄钟
 
@@ -144,8 +157,8 @@ EOF
 ## 状态栏说明
 
 ```
-第一行：天气  节假日倒计时  🏖周末倒计时  🕔下班倒计时  🍅番茄钟  🧘休息  💧喝水  🎯今日目标  出行灵感
-第二行：📊ctx占用  🗺️旅行计划  💰每日用量  📝Git未提交  ⬇落后  ⬆领先
+第一行：天气  节假日倒计时  🏖周末倒计时  🕔下班倒计时  🍅番茄钟  🧘休息  💧喝水  🍚饭点  🎯今日目标  出行灵感
+第二行：📊ctx占用  🗺️旅行计划  💰每日用量  📝Git未提交  ✓今日提交  ⬇落后  ⬆领先
 ```
 
 📊 ctx 按当前模型上下文窗口计算，1M 窗口模型会额外标注 `1M`（如 `📊 ctx 9% 1M`）。
