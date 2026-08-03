@@ -62,8 +62,9 @@ fi
 if $NEED_ROTATE; then
     HOLIDAYS_JSON="$HOME/.claude/scripts/ccday/holidays.json"
     [ ! -f "$HOLIDAYS_JSON" ] && exit 0
+    export HOME_LAT="${HOME_LAT:-31.28}" HOME_LNG="${HOME_LNG:-121.52}"
     python3 - "$TIP_CACHE" "$TODAY" "$COUNT" "$HOLIDAYS_JSON" <<'PYEOF'
-import json, sys, random
+import json, sys, random, os, math
 
 cache_path, today, count, hfile = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 with open(hfile) as f:
@@ -75,6 +76,33 @@ import datetime
 month = datetime.date.today().month
 season = "spring" if 3<=month<=5 else "summer" if 6<=month<=8 else "autumn" if 9<=month<=11 else "winter"
 
+def pick_weekend_trip(hubs, seed):
+    """同 ccday-label.sh：按 HOME_LAT/LNG 给具体城市+车程，超 400km 返回 None"""
+    if not hubs:
+        return None
+    try:
+        hlat = float(os.environ.get("HOME_LAT", "31.28"))
+        hlng = float(os.environ.get("HOME_LNG", "121.52"))
+    except ValueError:
+        return None
+
+    def dist(lat, lng):
+        r1, r2 = math.radians(hlat), math.radians(lat)
+        da, do = math.radians(lat - hlat), math.radians(lng - hlng)
+        a = math.sin(da/2)**2 + math.cos(r1)*math.cos(r2)*math.sin(do/2)**2
+        return 6371 * 2 * math.asin(math.sqrt(a))
+
+    hub = min(hubs, key=lambda h: dist(h.get("lat", 0), h.get("lng", 0)))
+    if dist(hub.get("lat", 0), hub.get("lng", 0)) > 400:
+        return None
+    spots = hub.get("spots", [])
+    if not spots:
+        return None
+    # 加盐：调用方已用同一个 seed 抽过一次，直接复用会让相邻日期反复出现同一城市
+    random.seed(seed * 2654435761 % 2**32)
+    s = random.choice(spots)
+    return f"🎒 {s['name']} {s['rail']}·{s['why']}"
+
 random.seed(count)
 r = random.random()
 if jokes and r < 0.5:
@@ -83,8 +111,10 @@ elif r < 0.7:
     pool = [t for t in tips if t.get("type") == "annual" and t.get("season") in (season, "all")]
     tip = random.choice(pool)["tip"] if pool else random.choice(jokes) if jokes else None
 else:
-    pool = [t for t in tips if t.get("type") == "nearby"]
-    tip = random.choice(pool)["tip"] if pool else random.choice(jokes) if jokes else None
+    tip = pick_weekend_trip(hdata.get("weekend_trips", []), count)
+    if not tip:
+        pool = [t for t in tips if t.get("type") == "nearby" and t.get("season") in (season, "all")]
+        tip = random.choice(pool)["tip"] if pool else random.choice(jokes) if jokes else None
 
 if tip:
     with open(cache_path, "w") as f:

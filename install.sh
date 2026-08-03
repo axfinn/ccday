@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.6.1"
+VERSION="v0.6.2"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -42,7 +42,8 @@ if [ ! -f "$HOME/.ccday.conf" ]; then
 # QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
 QWEATHER_LOCATION=116.38,39.91
 
-# 出发地（用于计算旅行距离，默认北京）
+# 出发地（旅行距离 + 🎒周末出行灵感的目的地都按此坐标算，默认北京）
+# 已内置城市圈：上海/北京/广州/深圳/杭州/成都/武汉/西安/南京/重庆
 HOME_LAT=39.91
 HOME_LNG=116.38
 
@@ -95,7 +96,8 @@ QWEATHER_PROJECT_ID=
 QWEATHER_PRIVATE_KEY=~/.ccday-private.pem
 QWEATHER_LOCATION=116.38,39.91
 
-# 出发地（用于计算旅行距离，默认北京）
+# 出发地（旅行距离 + 🎒周末出行灵感的目的地都按此坐标算，默认北京）
+# 已内置城市圈：上海/北京/广州/深圳/杭州/成都/武汉/西安/南京/重庆
 HOME_LAT=39.91
 HOME_LNG=116.38
 

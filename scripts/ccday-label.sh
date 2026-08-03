@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.1
+# 版本: v0.6.2
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -49,6 +49,8 @@ CCDAY_MEAL_WINDOW="${CCDAY_MEAL_WINDOW:-30}"      # 饭点提醒持续 N 分钟
 export CCDAY_WORK_START CCDAY_WORK_END CCDAY_OFFWORK CCDAY_GOAL
 export CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
 export CCDAY_LUNCH CCDAY_DINNER CCDAY_MEAL_WINDOW
+# 周边出行灵感需要知道你在哪，否则只能输出"高铁2小时内的城市"这种废话
+export HOME_LAT="${HOME_LAT:-31.28}" HOME_LNG="${HOME_LNG:-121.52}"
 
 LINE=$(/usr/bin/python3 - \
   "$QWEATHER_API_HOST" "$QWEATHER_KID" "$QWEATHER_PROJECT_ID" \
@@ -546,6 +548,36 @@ except Exception:
     pass
 
 # ── 出行灵感 / 段子 ───────────────────────────────────
+def pick_weekend_trip(hubs, seed):
+    """按 HOME_LAT/LNG 找最近的 hub，返回具体城市而不是"高铁2小时内的城市"。
+    离所有 hub 都超过 400km 时返回 None——宁可不显示，也别给无效信息。"""
+    if not hubs:
+        return None
+    try:
+        hlat = float(os.environ.get("HOME_LAT", "31.28"))
+        hlng = float(os.environ.get("HOME_LNG", "121.52"))
+    except ValueError:
+        return None
+
+    import math
+    def dist(lat, lng):
+        r1, r2 = math.radians(hlat), math.radians(lat)
+        da = math.radians(lat - hlat)
+        do = math.radians(lng - hlng)
+        a = math.sin(da/2)**2 + math.cos(r1)*math.cos(r2)*math.sin(do/2)**2
+        return 6371 * 2 * math.asin(math.sqrt(a))
+
+    hub = min(hubs, key=lambda h: dist(h.get("lat", 0), h.get("lng", 0)))
+    if dist(hub.get("lat", 0), hub.get("lng", 0)) > 400:
+        return None
+    spots = hub.get("spots", [])
+    if not spots:
+        return None
+    # 加盐：调用方已用同一个 seed 抽过一次，直接复用会让相邻日期反复出现同一城市
+    random.seed(seed * 2654435761 % 2**32)
+    s = random.choice(spots)
+    return f"🎒 {s['name']} {s['rail']}·{s['why']}"
+
 try:
     tip = None
     tip_cache = os.path.expanduser("~/.ccday-tip-cache.json")
@@ -568,8 +600,12 @@ try:
             pool = [t for t in tips if t.get("type") == "annual" and t.get("season") in (season, "all")]
             tip  = random.choice(pool)["tip"] if pool else None
         else:
-            pool = [t for t in tips if t.get("type") == "nearby"]
-            tip  = random.choice(pool)["tip"] if pool else None
+            # 周末去哪：优先给出具体城市 + 车程，没有匹配 hub 才退回通用 nearby
+            tip = pick_weekend_trip(hdata.get("weekend_trips", []), today.toordinal())
+            if not tip:
+                pool = [t for t in tips if t.get("type") == "nearby"
+                        and t.get("season") in (season, "all")]
+                tip  = random.choice(pool)["tip"] if pool else None
 
     if tip:
         if len(tip) > 22: tip = tip[:21] + "…"
