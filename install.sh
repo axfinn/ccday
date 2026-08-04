@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.6.5"
+VERSION="v0.6.6"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -85,6 +85,7 @@ CCDAY_WORK_END=19:30
 # 休息提醒
 CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
 CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（CONFIRM=1 时有效）
+CCDAY_BREAK_HOLD=30       # 久坐全屏提醒强制停留秒数（默认 30，0=可立即关闭）
 CCDAY_BREAK_CONFIRM=1     # 1=需要主动确认，0=定时自动消失
 CCDAY_BREAK_START=09:00   # 提醒生效开始时间
 CCDAY_BREAK_END=22:00     # 提醒生效结束时间
@@ -150,6 +151,7 @@ CCDAY_WORK_END=19:30
 # 休息提醒
 CCDAY_BREAK_INTERVAL=50   # 每隔 N 分钟提醒休息
 CCDAY_BREAK_DURATION=10   # 休息时长 N 分钟（CONFIRM=1 时有效）
+CCDAY_BREAK_HOLD=30       # 久坐全屏提醒强制停留秒数（默认 30，0=可立即关闭）
 CCDAY_BREAK_CONFIRM=1     # 1=需要主动确认，0=定时自动消失
 CCDAY_BREAK_START=09:00   # 提醒生效开始时间
 CCDAY_BREAK_END=22:00     # 提醒生效结束时间

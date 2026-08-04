@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.5
+# 版本: v0.6.6
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -76,26 +76,62 @@ holidays_file = sys.argv[6]
 today   = datetime.date.today()
 parts   = []
 
-def send_fullscreen_alert(title, msg):
-    """macOS 全屏 HTML 提醒，用 Safari 打开"""
+def send_fullscreen_alert(title, msg, key="break", hold=30):
+    """macOS 全屏 HTML 提醒，用 Safari 打开
+
+    title 显示在页面标题上——四种提醒（休息/下班/喝水/饭点）共用这个函数，
+    标题写死会出现"休息一下！"配"已加班 2m"的错配。
+    hold 是必须停留的秒数，只有久坐提醒需要拖住人；下班/喝水/饭点给 0，
+    提醒完可以立刻关掉，别把"叫你别久坐"变成"再按你坐 30 秒"。
+    key 决定临时文件名，避免两个提醒同一分钟到期时互相覆写内容。
+    """
     import random as _r
-    jokes = [
-        "久坐伤身，代码再香也要站起来闻闻空气",
-        "你的椎间盘正在用沉默抗议",
-        "程序员三大错觉：再坐一会儿、马上就好、这个 bug 很简单",
-        "站起来！不然你的腰会比你的代码先崩溃",
-        "眼睛也是 CPU，过热需要散热",
-        "活动一下，回来思路更清晰，bug 自己会消失（大概）",
-        "你已经坐了很久了，连椅子都累了",
-        "起来走走，顺便想想那个困扰你的 bug",
-    ]
-    joke = _r.choice(jokes)
+    JOKES = {
+        "break": [
+            "久坐伤身，代码再香也要站起来闻闻空气",
+            "你的椎间盘正在用沉默抗议",
+            "程序员三大错觉：再坐一会儿、马上就好、这个 bug 很简单",
+            "站起来！不然你的腰会比你的代码先崩溃",
+            "眼睛也是 CPU，过热需要散热",
+            "活动一下，回来思路更清晰，bug 自己会消失（大概）",
+            "你已经坐了很久了，连椅子都累了",
+            "起来走走，顺便想想那个困扰你的 bug",
+        ],
+        "offwork": [
+            "代码明天还在，今天的地铁不等人",
+            "没有什么 bug 值得你留到深夜",
+            "加班解决不了的问题，睡一觉往往能",
+            "下班不是逃跑，是可持续开发",
+        ],
+        "water": [
+            "咖啡不算水，续命液也需要稀释",
+            "身体 60% 是水，不是咖啡因",
+            "喝口水，顺便让眼睛离屏幕一会儿",
+        ],
+        "meal": [
+            "空腹调 bug，容易把自己也调没了",
+            "饭要按时吃，bug 可以慢慢改",
+            "低血糖写出来的代码，明天你自己也看不懂",
+        ],
+    }
+    EMOJI = {"break": "🧘", "offwork": "🌙", "water": "💧", "meal": "🍚"}
+    kind  = key.split("-")[0]          # meal-lunch / meal-dinner 归到 meal
+    joke  = _r.choice(JOKES.get(kind, JOKES["break"]))
+    emoji = EMOJI.get(kind, "🧘")
+
+    def esc(s):
+        """提醒文案会进 HTML，先转义——文案里出现 < & 不该把页面搞坏"""
+        return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+                      .replace(">", "&gt;").replace('"', "&quot;"))
+
     try:
         js = r"""
-var total=30, clicks=0;
+var total=__HOLD__, clicks=0;
 var taunts=["才{n}秒？你在逗我？","认真的吗？才{n}秒！","椎间盘表示不服","{n}秒就够了？骗谁呢","再等等，就快了","你的腰还没谢谢你呢"];
 var el=document.getElementById('sec'), btn=document.getElementById('btn'), timerEl=document.getElementById('timer');
+if(total<=0){timerEl.style.display='none'}
 var iv=setInterval(function(){
+  if(total<=0){clearInterval(iv);return}
   total--;
   el.textContent=total;
   if(total<=0){clearInterval(iv);timerEl.style.display='none';btn.textContent='好了，继续工作 ✓';btn.onclick=function(){window.close()}};
@@ -110,6 +146,7 @@ function tryClose(){
 }
 btn.addEventListener('dblclick',function(){window.close()});
 """
+        js = js.replace("__HOLD__", str(int(hold)))
         html = (
             '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
             '*{margin:0;padding:0;box-sizing:border-box}'
@@ -123,37 +160,39 @@ btn.addEventListener('dblclick',function(){window.close()});
             'button{font-size:24px;padding:16px 48px;background:#4a4a8a;color:white;'
             'border:none;border-radius:12px;cursor:pointer}'
             '</style></head><body>'
-            '<div class="emoji">🧘</div>'
-            '<h1>休息一下！</h1>'
-            '<div class="activity">' + msg + '</div>'
-            '<p>' + joke + '</p>'
+            '<div class="emoji">' + emoji + '</div>'
+            '<h1>' + esc(title) + '</h1>'
+            '<div class="activity">' + esc(msg) + '</div>'
+            '<p>' + esc(joke) + '</p>'
             '<div id="timer" style="font-size:20px;color:#666;margin-bottom:20px">'
-            '还需休息 <span id="sec">30</span> 秒</div>'
+            '还需休息 <span id="sec">' + str(int(hold)) + '</span> 秒</div>'
             '<button id="btn" onclick="tryClose()">好了，继续工作</button>'
             '<div style="font-size:14px;color:#555;margin-top:12px">双击可强制关闭</div>'
             '<script>' + js + '</script>'
             '</body></html>'
         )
-        html_path = os.path.expanduser("~/.ccday-break-alert.html")
+        html_path = os.path.expanduser(f"~/.ccday-alert-{key}.html")
         with open(html_path, "w") as f:
             f.write(html)
-        applescript = f'''tell application "Safari"
+        # 窗口尺寸跟着主屏走，写死 1440x900 在外接/高分屏上会错位
+        applescript = f'''tell application "Finder" to set sb to bounds of window of desktop
+tell application "Safari"
   activate
   open POSIX file "{html_path}"
   delay 0.5
-  tell window 1 to set bounds to {{0, 0, 1440, 900}}
+  tell window 1 to set bounds to sb
 end tell'''
         subprocess.Popen(["osascript", "-e", applescript],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
-def send_notification(title, msg):
+def send_notification(title, msg, key="break", hold=30):
     """跨平台系统通知：macOS 用全屏提醒，Linux 用 notify-send"""
     try:
         sys_name = platform.system()
         if sys_name == "Darwin":
-            send_fullscreen_alert(title, msg)
+            send_fullscreen_alert(title, msg, key, hold)
         elif sys_name == "Linux":
             subprocess.Popen(
                 ["notify-send", title, msg, "--urgency=normal", "--expire-time=10000"],
@@ -162,8 +201,11 @@ def send_notification(title, msg):
     except Exception:
         pass
 
-def notify_once(key, title, msg, cooldown):
-    """用标记文件防重复弹，cooldown 秒内只弹一次"""
+def notify_once(key, title, msg, cooldown, hold=0):
+    """用标记文件防重复弹，cooldown 秒内只弹一次
+
+    hold 默认 0——只有久坐提醒需要强制停留，其余提醒看完就能关。
+    """
     notif_file = os.path.expanduser(f"~/.ccday-notif-{key}.json")
     try:
         with open(notif_file) as f:
@@ -171,7 +213,7 @@ def notify_once(key, title, msg, cooldown):
     except Exception:
         last_ts = 0
     if time.time() - last_ts > cooldown:
-        send_notification(title, msg)
+        send_notification(title, msg, key, hold)
         try:
             with open(notif_file, "w") as f:
                 json.dump({"ts": time.time()}, f)
@@ -421,14 +463,20 @@ def resolve_punch():
     now_p = _dt.datetime.now()
     win_start = now_p.replace(hour=ps_h, minute=ps_m, second=0, microsecond=0)
     win_end   = now_p.replace(hour=pe_h, minute=pe_m, second=59, microsecond=0)
-    if not (win_start <= now_p <= win_end):
-        return None
+    if now_p < win_start:
+        return None      # 窗口还没开始，今天的班还没上
 
-    # pmset 只在"今天还没记录"时调用一次，之后都读缓存，不会每次刷新都拉日志
+    # pmset 读的是历史日志，过了窗口照样能查到早上的首次活动——所以先试它。
+    # 只在"今天还没记录"时调用一次，之后都读缓存，不会每次刷新都拉日志。
     detected = detect_mac_punch(win_start, win_end, now_p)
     if detected:
         save_punch(detected, "pmset")
         return detected
+
+    # refresh 兜底只有"现在还在窗口内"才成立：下午 6 点第一次刷新状态栏，
+    # 不能把此刻当成上班时间，那种情况退回固定的 WORK_START/END
+    if now_p > win_end:
+        return None
 
     save_punch(now_p, "refresh")
     return now_p
@@ -525,7 +573,7 @@ try:
                 parts.append(f"🌙 加班 {fmt_span(over)}")
             # 超过下班点，每 30 分钟提醒一次收工
             notify_once("offwork", "该下班了",
-                        "🌙 已加班 " + fmt_span(over) + "，收个尾吧", 1800)
+                        "🌙 已加班 " + fmt_span(over) + "，收个尾吧", 1800, 0)
 except Exception:
     pass
 
@@ -553,6 +601,8 @@ try:
     break_interval = int(os.environ.get("CCDAY_BREAK_INTERVAL", "50")) * 60
     break_duration = int(os.environ.get("CCDAY_BREAK_DURATION", "10")) * 60
     break_confirm  = os.environ.get("CCDAY_BREAK_CONFIRM", "1") == "1"
+    # 全屏提醒里强制停留的秒数，0=看完可以马上关
+    break_duration_hold = int(os.environ.get("CCDAY_BREAK_HOLD", "30"))
     break_start_h, break_start_m = map(int, os.environ.get("CCDAY_BREAK_START", "09:00").split(":"))
     break_end_h,   break_end_m   = map(int, os.environ.get("CCDAY_BREAK_END",   "22:00").split(":"))
 
@@ -564,6 +614,14 @@ try:
         if break_confirm:
             # 需要主动确认：读文件判断上次休息时间
             break_file = os.path.expanduser("~/.ccday-break.json")
+
+            def save_break(ts, resting_flag):
+                try:
+                    with open(break_file, "w") as f:
+                        json.dump({"ts": ts, "resting": resting_flag}, f)
+                except Exception:
+                    pass
+
             last_break = 0
             resting    = False
             try:
@@ -576,6 +634,14 @@ try:
                 pass
 
             elapsed = time.time() - last_break if last_break else break_interval + 1
+
+            # 长时间没确认过休息（关机、请假、压根没用这功能）时 elapsed 会一直涨，
+            # 提醒就永久常驻状态栏、弹窗还按冷却一轮轮弹。超过 2 轮就当没在用，
+            # 把计时重新对齐到现在，恢复"每 interval 提醒一次"的节奏。
+            if elapsed > break_interval * 2:
+                save_break(time.time(), False)
+                last_break = time.time()
+                elapsed    = 0
 
             if resting:
                 rest_left = int((break_duration - (time.time() - last_break)) / 60) + 1
@@ -590,7 +656,8 @@ try:
                 random.seed(int(last_break // 60))
                 activity = random.choice(activities)
                 parts.append(f"🧘 {activity}!")
-                notify_once("break", "休息提醒", "🧘 " + activity, break_interval * 0.9)
+                notify_once("break", "休息一下！", "🧘 " + activity,
+                            break_interval, break_duration_hold)
         else:
             # 不需要确认：纯按时间，到点显示5分钟自动消失（同喝水逻辑）
             day_start  = now_dt.replace(hour=break_start_h, minute=break_start_m, second=0, microsecond=0)
@@ -605,7 +672,8 @@ try:
                 random.seed(elapsed_min // (break_interval // 60))
                 activity = random.choice(activities)
                 parts.append(f"🧘 {activity}!")
-                notify_once("break", "休息提醒", "🧘 " + activity, (break_interval // 60) * 60 * 0.9)
+                notify_once("break", "休息一下！", "🧘 " + activity,
+                            break_interval, break_duration_hold)
 except Exception:
     pass
 
@@ -629,7 +697,7 @@ try:
             random.seed(elapsed_min // water_interval)
             msg = random.choice(msgs)
             parts.append(f"💧 {msg}!")
-            notify_once("water", "喝水提醒", "💧 " + msg, water_interval * 60 * 0.9)
+            notify_once("water", "喝水提醒", "💧 " + msg, water_interval * 60, 0)
 except Exception:
     pass
 
@@ -656,7 +724,7 @@ try:
             random.seed(today.toordinal() + mh)
             msg = random.choice(msgs)
             parts.append(f"{icon} {msg}!")
-            notify_once(f"meal-{key}", f"{label}时间", f"{icon} {msg}", meal_window * 60)
+            notify_once(f"meal-{key}", f"{label}时间", f"{icon} {msg}", meal_window * 60, 0)
 except Exception:
     pass
 

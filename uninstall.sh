@@ -83,6 +83,11 @@ CACHES=(
     "$HOME/.ccday-session-count"
     "$HOME/.ccday-version"
     "$HOME/.ccday-break-alert.html"
+    "$HOME/.ccday-alert-break.html"
+    "$HOME/.ccday-alert-offwork.html"
+    "$HOME/.ccday-alert-water.html"
+    "$HOME/.ccday-alert-meal-lunch.html"
+    "$HOME/.ccday-alert-meal-dinner.html"
 )
 REMOVED=0
 for f in "${CACHES[@]}"; do
