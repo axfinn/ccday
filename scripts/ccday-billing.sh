@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-billing.sh — 用量/余额插件（有即用，没有不用）
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.4
+# 版本: v0.6.5
 #
 # 设计原则：能拿到就显示，拿不到就完全静默，绝不拖慢状态栏。
 #   1. token 从多处按序探测，一个都没有 → 不输出

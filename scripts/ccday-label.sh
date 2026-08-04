@@ -1,13 +1,15 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.4
+# 版本: v0.6.5
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
 #   QWEATHER_LOCATION   经纬度，如 121.47,31.23
-#   CCDAY_WORK_START    上班时间，默认 10:00
-#   CCDAY_WORK_END      下班时间，默认 19:30
+#   CCDAY_WORK_START    上班时间，默认 10:00（未打卡时的兜底）
+#   CCDAY_WORK_END      下班时间，默认 19:30（未打卡时的兜底）
+#   CCDAY_WORK_PUNCH    1=按首次开屏时间打卡（默认），下班=上班+CCDAY_WORK_HOURS
+#   CCDAY_WORK_HOURS    打卡模式工时，默认 9.5
 #   CCDAY_GOAL          今日目标，如 "完成登录模块"
 #   TRIP_*              旅行计划（可选）
 
@@ -36,6 +38,11 @@ QWEATHER_LOCATION="${QWEATHER_LOCATION:-121.47,31.23}"
 CCDAY_WORK_START="${CCDAY_WORK_START:-10:00}"
 CCDAY_WORK_END="${CCDAY_WORK_END:-19:30}"
 CCDAY_OFFWORK="${CCDAY_OFFWORK:-1}"               # 1=显示下班倒计时，0=隐藏
+CCDAY_WORK_PUNCH="${CCDAY_WORK_PUNCH:-1}"         # 1=按首次开屏时间打卡，0=用固定 WORK_START
+CCDAY_WORK_HOURS="${CCDAY_WORK_HOURS:-9.5}"       # 打卡模式下的工时，下班=上班+此值
+CCDAY_PUNCH_START="${CCDAY_PUNCH_START:-06:00}"   # 打卡有效窗口开始
+CCDAY_PUNCH_END="${CCDAY_PUNCH_END:-12:00}"       # 打卡有效窗口结束
+CCDAY_PUNCH_SHOW="${CCDAY_PUNCH_SHOW:-1}"         # 1=下班倒计时带上 (上班→下班) 时间
 CCDAY_GOAL="${CCDAY_GOAL:-}"
 CCDAY_BREAK_INTERVAL="${CCDAY_BREAK_INTERVAL:-50}"
 CCDAY_BREAK_DURATION="${CCDAY_BREAK_DURATION:-10}"
@@ -47,6 +54,7 @@ CCDAY_LUNCH="${CCDAY_LUNCH:-12:00}"               # 午饭提醒时间，留空�
 CCDAY_DINNER="${CCDAY_DINNER:-18:00}"             # 晚饭提醒时间，留空关闭
 CCDAY_MEAL_WINDOW="${CCDAY_MEAL_WINDOW:-30}"      # 饭点提醒持续 N 分钟
 export CCDAY_WORK_START CCDAY_WORK_END CCDAY_OFFWORK CCDAY_GOAL
+export CCDAY_WORK_PUNCH CCDAY_WORK_HOURS CCDAY_PUNCH_START CCDAY_PUNCH_END CCDAY_PUNCH_SHOW
 export CCDAY_BREAK_INTERVAL CCDAY_BREAK_DURATION CCDAY_BREAK_START CCDAY_BREAK_END CCDAY_BREAK_CONFIRM CCDAY_WATER_INTERVAL
 export CCDAY_LUNCH CCDAY_DINNER CCDAY_MEAL_WINDOW
 # 周边出行灵感需要知道你在哪，否则只能输出"高铁2小时内的城市"这种废话
@@ -323,13 +331,91 @@ def fmt_span(seconds):
         return f"{mins // 60}h{mins % 60:02d}m"
     return f"{mins}m"
 
+# ── 上班打卡（首次开屏时间）────────────────────────────
+# 弹性工作制：CCDAY_PUNCH_START–CCDAY_PUNCH_END（默认 06:00–12:00）之间的第一次
+# 状态栏刷新记为上班时间，下班点 = 上班 + CCDAY_WORK_HOURS。晚到晚走，不再按死的 10:00 算。
+# 首次开屏晚于窗口（下午才开电脑）或非工作日 → 退回固定的 CCDAY_WORK_START/END。
+PUNCH_FILE = os.path.expanduser("~/.ccday-punch.json")
+
+
+def load_punch():
+    """今天已记录的上班 datetime，没有返回 None"""
+    try:
+        with open(PUNCH_FILE) as f:
+            d = json.load(f)
+    except Exception:
+        return None
+    if d.get("date") != today_str:
+        return None      # 隔夜挂着不关机也不会沿用昨天的打卡
+    try:
+        return _dt.datetime.fromtimestamp(float(d["ts"]))
+    except Exception:
+        return None
+
+
+def save_punch(dt):
+    try:
+        with open(PUNCH_FILE, "w") as f:
+            json.dump({"date": today_str, "ts": dt.timestamp(),
+                       "time": dt.strftime("%H:%M")}, f)
+    except Exception:
+        pass
+
+
+def resolve_punch():
+    if os.environ.get("CCDAY_WORK_PUNCH", "1") != "1" or not is_workday_today:
+        return None
+
+    cfg_s = parse_hhmm(os.environ.get("CCDAY_WORK_START", "10:00"), 10, 0)
+    cfg_e = parse_hhmm(os.environ.get("CCDAY_WORK_END", "19:30"), 19, 30)
+    if cfg_e <= cfg_s:
+        return None      # 跨天班（22:00→06:00）：早上开屏是在下班，不是上班
+
+    got = load_punch()
+    if got:
+        return got
+
+    ps_h, ps_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_START", "06:00"), 6, 0)
+    pe_h, pe_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_END", "12:00"), 12, 0)
+    now_p = _dt.datetime.now()
+    if _dt.time(ps_h, ps_m) <= now_p.time() <= _dt.time(pe_h, pe_m):
+        save_punch(now_p)
+        return now_p
+    return None
+
+
+def resolve_worktime():
+    """(上班 datetime, 下班 datetime, 是否来自打卡)"""
+    now_w = _dt.datetime.now()
+    punch = resolve_punch()
+    if punch:
+        try:
+            hours = float(os.environ.get("CCDAY_WORK_HOURS", "9.5"))
+        except ValueError:
+            hours = 9.5
+        return punch, punch + _dt.timedelta(hours=hours), True
+
+    ws_h, ws_m = parse_hhmm(os.environ.get("CCDAY_WORK_START", "10:00"), 10, 0)
+    we_h, we_m = parse_hhmm(os.environ.get("CCDAY_WORK_END", "19:30"), 19, 30)
+    start_dt = now_w.replace(hour=ws_h, minute=ws_m, second=0, microsecond=0)
+    end_dt   = now_w.replace(hour=we_h, minute=we_m, second=0, microsecond=0)
+    if end_dt <= start_dt:
+        # 跨天班（如 22:00→06:00）：凌晨还在昨天开始的这一班里
+        if now_w < end_dt:
+            start_dt -= _dt.timedelta(days=1)
+        else:
+            end_dt += _dt.timedelta(days=1)
+    return start_dt, end_dt, False
+
+
+WORK_START_DT, WORK_END_DT, FROM_PUNCH = resolve_worktime()
+
 if weekday == 5 and today_str not in workdays:
     parts.append("🏖 休息!")
 elif weekday == 6 and today_str not in workdays:
     parts.append("🏖 最后一天")
 else:
     # 找下一个真正的休息日（非工作日且不是调休上班日）
-    end_h, end_m = parse_hhmm(os.environ.get("CCDAY_WORK_END", "19:30"), 19, 30)
     now = _dt.datetime.now()
 
     # 找下一个休息日
@@ -345,9 +431,8 @@ else:
             break
 
     if next_off and (next_off - today).days == 1:
-        # 明天就休息，精确到小时
-        end_dt = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
-        diff   = end_dt - now
+        # 明天就休息，精确到小时（下班点跟打卡走，晚到的话周末也晚来一点）
+        diff = WORK_END_DT - now
         total_hours = diff.total_seconds() / 3600
         if total_hours <= 0:
             parts.append("🏖 快到了!")
@@ -365,17 +450,9 @@ else:
 # 只在工作日显示：上班前 🕘 待上班、工作中 🕔 剩余、过点后 🌙 加班时长
 try:
     if os.environ.get("CCDAY_OFFWORK", "1") == "1" and is_workday_today:
-        ws_h, ws_m = parse_hhmm(os.environ.get("CCDAY_WORK_START", "10:00"), 10, 0)
-        we_h, we_m = parse_hhmm(os.environ.get("CCDAY_WORK_END",   "19:30"), 19, 30)
         now_w    = _dt.datetime.now()
-        start_dt = now_w.replace(hour=ws_h, minute=ws_m, second=0, microsecond=0)
-        end_dt   = now_w.replace(hour=we_h, minute=we_m, second=0, microsecond=0)
-        if end_dt <= start_dt:
-            # 跨天班（如 22:00→06:00）：凌晨还在昨天开始的这一班里
-            if now_w < end_dt:
-                start_dt -= _dt.timedelta(days=1)
-            else:
-                end_dt += _dt.timedelta(days=1)
+        start_dt = WORK_START_DT
+        end_dt   = WORK_END_DT
 
         if now_w < start_dt:
             parts.append(f"🕘 待上班 {fmt_span((start_dt - now_w).total_seconds())}")
@@ -385,7 +462,11 @@ try:
             # 最后半小时给个更醒目的提示
             icon  = "🔥" if left <= 1800 else "🕔"
             done_pct = int((total - left) / total * 100) if total > 0 else 0
-            parts.append(f"{icon} 下班 {fmt_span(left)}·{done_pct}%")
+            # 打卡模式下带上实际上班时间，让人知道下班点是怎么算出来的
+            tail = f"·{done_pct}%"
+            if FROM_PUNCH and os.environ.get("CCDAY_PUNCH_SHOW", "1") == "1":
+                tail = f"·{done_pct}% ({start_dt.strftime('%H:%M')}→{end_dt.strftime('%H:%M')})"
+            parts.append(f"{icon} 下班 {fmt_span(left)}{tail}")
         else:
             over = (now_w - end_dt).total_seconds()
             if over < 300:

@@ -77,6 +77,7 @@ CACHES=(
     "$HOME/.ccday-weather-cache.json"
     "$HOME/.ccday-billing-cache.json"
     "$HOME/.ccday-break.json"
+    "$HOME/.ccday-punch.json"
     "$HOME/.ccday-pomodoro.json"
     "$HOME/.ccday-goal.json"
     "$HOME/.ccday-session-count"

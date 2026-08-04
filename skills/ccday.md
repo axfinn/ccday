@@ -52,6 +52,43 @@ print('🧘 休息开始，好好放松')
 
 用户说"改成 12:30 吃午饭"、"晚饭提醒关掉"等，用下面的通用配置写入方法改 `~/.ccday.conf`。
 
+## 上班打卡 / 下班倒计时（🕔）
+
+默认弹性工作制：早上 `CCDAY_PUNCH_START`–`CCDAY_PUNCH_END`（默认 06:00–12:00）之间
+第一次刷新状态栏的时刻记为上班时间，下班点 = 上班 + `CCDAY_WORK_HOURS`（默认 9.5h）。
+记录在 `~/.ccday-punch.json`，只对当天有效。
+
+**查看今天的打卡**：
+```bash
+cat ~/.ccday-punch.json 2>/dev/null || echo "今天还没打卡（或已退回固定 WORK_START/END）"
+```
+
+**改打卡时间**（用户说"我其实 9 点就来了"、"打卡记错了"）：
+```bash
+python3 -c "
+import json, datetime, sys
+t = '09:00'   # ← 改成实际上班时间
+d = datetime.date.today()
+h, m = map(int, t.split(':'))
+dt = datetime.datetime.combine(d, datetime.time(h, m))
+with open('$HOME/.ccday-punch.json', 'w') as f:
+    json.dump({'date': str(d), 'ts': dt.timestamp(), 'time': t}, f)
+print(f'✅ 上班时间已改为 {t}')
+"
+```
+
+**清掉重新打卡**（用户说"重新打卡"）：
+```bash
+rm -f ~/.ccday-punch.json
+```
+清掉后下次状态栏刷新时，若仍在打卡窗口内会记为当前时刻；已过窗口则退回固定 `CCDAY_WORK_START`。
+
+**用户说"不想按开屏算，就用固定 10 点上班"** → 用下面的通用配置方法设 `CCDAY_WORK_PUNCH=0`。
+**用户说"工时改成 8 小时"** → 设 `CCDAY_WORK_HOURS=8`。
+**用户说"倒计时后面那个时间括号太长了"** → 设 `CCDAY_PUNCH_SHOW=0`。
+
+改完配置提醒用户重启 Claude Code，或说明下次状态栏刷新即生效（打卡类改动立即生效）。
+
 ## 用量/余额显示（💰）
 
 独立插件 `~/.claude/scripts/ccday/ccday-billing.sh`，遵循"有即用，没有不用"：
@@ -98,21 +135,25 @@ print(f"✅ {key} 已设为 {val or '(空，已关闭)'}")
 PY
 ```
 
-常用 key：`CCDAY_WORK_START` `CCDAY_WORK_END` `CCDAY_OFFWORK` `CCDAY_LUNCH`
+常用 key：`CCDAY_WORK_PUNCH` `CCDAY_WORK_HOURS` `CCDAY_PUNCH_START` `CCDAY_PUNCH_END`
+`CCDAY_PUNCH_SHOW` `CCDAY_WORK_START` `CCDAY_WORK_END` `CCDAY_OFFWORK` `CCDAY_LUNCH`
 `CCDAY_DINNER` `CCDAY_MEAL_WINDOW` `CCDAY_BREAK_INTERVAL` `CCDAY_WATER_INTERVAL` `CCDAY_GOAL`
 
-## 下班倒计时
-
-工作日按 `CCDAY_WORK_START`（默认 10:00）和 `CCDAY_WORK_END`（默认 19:30）显示：
+### 下班倒计时的四种状态
 
 - 上班前 `🕘 待上班 1h45m`
-- 工作中 `🕔 下班 3h45m·60%`（最后半小时换 🔥）
+- 工作中 `🕔 下班 3h45m·60% (10:12→19:42)`（最后半小时换 🔥；括号仅打卡模式显示）
 - 下班后 `🎉 下班了!`，5 分钟后转 `🌙 加班 2h15m`
 
-周末和法定节假日不显示，调休上班日照常显示。支持跨天班。
+周末和法定节假日不显示，调休上班日照常显示。
 
-用户说"我 18 点下班"、"改成 20:00 下班"等，用上面「修改配置项」的方法改 `CCDAY_WORK_END`。
-关闭下班倒计时则设 `CCDAY_OFFWORK=0`。
+**注意**：用户说"我 18 点下班"、"改成 20:00 下班"时，先分辨他要的是哪种：
+
+- 想要**固定下班点** → 设 `CCDAY_WORK_PUNCH=0` + `CCDAY_WORK_END=20:00`。
+  只改 `CCDAY_WORK_END` 而不关打卡是无效的，打卡模式下这个值不参与计算
+- 想要**改工时**（弹性，晚到晚走）→ 设 `CCDAY_WORK_HOURS`，比如 8 小时班设 `8`
+
+拿不准就问一句，别默认改错那个。关闭整个倒计时用 `CCDAY_OFFWORK=0`。
 
 ## 番茄钟
 
