@@ -2,17 +2,17 @@
 
 > Claude Code 状态栏插件 — 天气 · 节假日 · 周末倒计时 · 下班倒计时 · 番茄钟 · 休息/喝水/饭点提醒 · 今日目标 · Git状态 · 出行灵感
 
-**版本：v0.6.3**
+**版本：v0.6.4**
 
 在 Claude Code 底部状态栏实时显示两行信息：
 
 ```
 🌫 18° 雾  🔨 劳动节·14天  🏖 还8h  🕔 下班 3h45m·60%  🍅24:59 写文档  🧘 站起来伸个懒腰!  🍚 去吃午饭!  🎯 完成登录模块
-📊 ctx 76%  │  🗺️ 长兴岛郊野公园 22km·1天后 · 带足够的水  │  💰5%  │  📝3 ✓5 ⬇1
+📊 ctx 76%  │  🗺️ 长兴岛郊野公园 22km·1天后 · 带足够的水  │  💰余213¥  │  📝3 ✓5 ⬇1
 ```
 
 **第一行**：天气 · 节假日倒计时 · 周末倒计时 · 🕔下班倒计时 · 🍅番茄钟 · 🧘休息提醒 · 💧喝水提醒 · 🍚饭点提醒 · 🎯今日目标 · 出行灵感/段子
-**第二行**：📊上下文占用 · 🗺️旅行计划 · 💰每日用量 · 📝Git状态
+**第二行**：📊上下文占用 · 🗺️旅行计划 · 💰每日用量/余额 · 📝Git状态
 
 - **macOS** — open-meteo 免费天气，无需任何配置
 - **Linux** — 优先和风天气 API，无配置时自动 fallback 到 open-meteo
@@ -23,6 +23,7 @@
 - **休息提醒** — 每隔 N 分钟提醒活动，支持强确认（有倒计时）或自动消失两种模式
 - **喝水提醒** — 每隔 N 分钟自动显示 5 分钟后消失，无需确认
 - **饭点提醒** — 午饭/晚饭到点显示 30 分钟后自动消失，同时触发系统通知
+- **用量插件** — 独立脚本，token/接口探测到就显示 💰，探测不到自动静默，接口不通时负缓存不重试
 
 ---
 
@@ -230,11 +231,64 @@ CCDAY_LUNCH=12:00                     # 午饭时间（默认 12:00，留空关�
 CCDAY_DINNER=18:00                    # 晚饭时间（默认 18:00，留空关闭）
 CCDAY_MEAL_WINDOW=30                  # 到点后持续显示 N 分钟（默认 30）
 
-# ── 用量显示 ────────────────────────────────────────────────
-CCDAY_BILLING=1                       # 1=显示 💰 用量，0=隐藏
-CCDAY_BILLING_BUDGET=1000             # 每日预算（元），显示"💰余X.X¥"；设 0 显示百分比
-CCDAY_BILLING_TTL=300                 # 用量接口缓存秒数（默认 300）
+# ── 用量/余额插件（有即用，没有不用）──────────────────────────
+CCDAY_BILLING=1                       # 1=启用 💰 用量，0=关闭
+# CCDAY_BILLING_TOKEN=                # 显式指定 token，留空自动探测
+# CCDAY_BILLING_API=                  # 完整接口地址，留空按 ANTHROPIC_BASE_URL 推导
+CCDAY_BILLING_BUDGET=0                # 每日预算（元），0=用接口返回的 daily_limit
+CCDAY_BILLING_FORMAT=auto             # auto|percent|remain|used|balance|full
+CCDAY_BILLING_POOL=0                  # 1=额外显示团队池占用 🏊
+CCDAY_BILLING_TTL=300                 # 成功结果缓存秒数（默认 300）
+CCDAY_BILLING_FAIL_TTL=1800           # 请求失败后静默秒数（默认 1800）
 ```
+
+---
+
+## 用量/余额插件
+
+独立脚本 `scripts/ccday-billing.sh`，**有即用，没有不用**：探测到 token 和接口就在第二行显示 `💰`，
+探测不到就完全静默，不报错、不拖慢状态栏。所以这份配置对所有人都是安全默认值，不需要按环境改。
+
+**token 探测顺序**（先命中先用）：
+
+1. `CCDAY_BILLING_TOKEN`（配置文件里显式指定）
+2. 环境变量 `ANTHROPIC_AUTH_TOKEN` → `AICODING_API_KEY` → `ANTHROPIC_API_KEY`
+3. `~/.claude/settings.json` / `settings.local.json` 的 `env` 段
+   （statusLine 子进程未必继承到这些变量，所以直接读文件兜底）
+4. `~/.claude/live-code.json` 的 `token` 字段
+
+**接口地址**默认取 `$ANTHROPIC_BASE_URL` + `/v1/billing/usage`，跟着你的网关走；
+自建网关路径不同时用 `CCDAY_BILLING_API` 写完整地址。
+
+**诊断**：
+
+```bash
+bash ~/.claude/scripts/ccday/ccday-billing.sh --check
+```
+
+会打印 token 来源、实际请求地址、接口原始响应和最终状态栏文本，
+排查"为什么不显示 💰"时先跑这个。
+
+**显示格式**（`CCDAY_BILLING_FORMAT`）：
+
+| 值 | 效果 | 说明 |
+|----|------|------|
+| `auto` | `💰余213¥` | 默认。能算余额就显示余额，否则退回百分比 |
+| `percent` | `💰47%` | 只看百分比 |
+| `remain` | `💰余213¥` | 剩余额度 |
+| `used` | `💰用187¥` | 今日已用 |
+| `balance` | `💰余额973¥` | 账户总余额 |
+| `full` | `💰187/400¥·47%` | 已用/预算·百分比 |
+
+用量达预算 **75%** 图标变 🔥，**90%** 变 🈵。
+`CCDAY_BILLING_POOL=1` 再追加团队池占用 `🏊46%`。
+
+**降级策略**：成功结果缓存 `CCDAY_BILLING_TTL` 秒（默认 300）；
+请求失败或接口返回结构不认识时写入负缓存，`CCDAY_BILLING_FAIL_TTL` 秒（默认 1800）内不再重试，
+避免每次刷新状态栏都去撞一个不通的接口。单次请求超时 3 秒。
+
+> 字段按需渲染：`daily_usage` / `daily_limit` / `daily_percent` / `balance` / `pool_percent`
+> 哪个有就用哪个，接口只返回一部分也能正常显示。
 
 ---
 
@@ -279,6 +333,7 @@ ccday/
 ├── scripts/
 │   ├── ccday-label.sh          # 主脚本（状态栏输出）
 │   ├── ccday-joke-gen.sh       # Stop hook（更新 tip/段子缓存）
+│   ├── ccday-billing.sh        # 用量插件（有即用没有不用，--check 可诊断）
 │   └── holidays.json           # 节假日 + 调休 + 出行灵感 + 周末城市圈 + 段子
 └── skills/
     └── ccday.md                # Claude Code skill 源文件
@@ -295,7 +350,7 @@ ccday/
 | `~/.ccday-pomodoro.json` | 番茄钟状态 |
 | `~/.ccday-goal.json` | 今日目标完成状态 |
 | `~/.ccday-break.json` | 休息提醒状态（CONFIRM=1 时使用） |
-| `~/.ccday-billing-cache.json` | 用量接口缓存（默认5分钟） |
+| `~/.ccday-billing-cache.json` | 用量缓存（成功 5 分钟 / 失败 30 分钟负缓存） |
 | `~/.ccday-notif-*.json` | 通知去重标记（break/water/meal-*） |
 | `~/.ccday-version` | 已安装版本号 |
 | `~/.ccday-private.pem` | 和风天气私钥（用户自备） |
@@ -311,6 +366,7 @@ ccday/
 
 ## 版本历史
 
+- **v0.6.4** — 💰 用量拆成独立插件 `ccday-billing.sh`，遵循"有即用，没有不用"：token 四级探测（配置/环境变量/settings.json/live-code.json）、接口地址跟随 `ANTHROPIC_BASE_URL`、失败写负缓存 30 分钟内不重试、`--check` 诊断模式、6 种显示格式、75%/90% 用量预警。**修复**：旧版读的是 `daily_used` 而接口返回的是 `daily_usage`，导致配了预算时余额永远显示为满额
 - **v0.6.3** — 修复 `uninstall.sh` 删不掉 skill（还在找 v0.3 的单文件路径）；`update.sh` 支持"远端无新提交但本地已安装版本过期"的情况，并检查 settings.json 挂载点是否齐全；卸载时清理运行时缓存
 - **v0.6.2** — 🎒 周末灵感改为按 `HOME_LAT/LNG` 给具体城市+车程+玩法（内置 10 个城市圈），删掉"高铁2小时内的城市""携程比价"这类无信息量的空话
 - **v0.6.1** — 🍚 午饭/晚饭提醒（默认 12:00 / 18:00，可留空关闭）；Git 状态新增 `✓N` 今日提交数（仅本人）

@@ -42,7 +42,7 @@ NEED_INSTALL=false
 if [ "$CURRENT" != "$REPO_VERSION" ]; then
     NEED_INSTALL=true
 else
-    for f in ccday-label.sh ccday-joke-gen.sh holidays.json; do
+    for f in ccday-label.sh ccday-joke-gen.sh ccday-billing.sh holidays.json; do
         if ! cmp -s "$SCRIPT_DIR/scripts/$f" "$INSTALL_DIR/$f"; then
             NEED_INSTALL=true
             break
@@ -61,9 +61,11 @@ mkdir -p "$INSTALL_DIR"
 # 更新脚本和 skill（不覆盖用户配置）
 cp "$SCRIPT_DIR/scripts/ccday-label.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/ccday-joke-gen.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scripts/ccday-billing.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/holidays.json" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/ccday-label.sh"
 chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
+chmod +x "$INSTALL_DIR/ccday-billing.sh"
 
 SKILLS_DIR="$HOME/.claude/skills"
 mkdir -p "$SKILLS_DIR/ccday"

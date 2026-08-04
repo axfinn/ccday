@@ -3,7 +3,7 @@
 # 项目: https://github.com/axfinn/ccday
 set -e
 
-VERSION="v0.6.3"
+VERSION="v0.6.4"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.claude/scripts/ccday"
@@ -18,10 +18,20 @@ echo "📦 安装 ccday $VERSION..."
 mkdir -p "$INSTALL_DIR"
 cp "$SCRIPT_DIR/scripts/ccday-label.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/ccday-joke-gen.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scripts/ccday-billing.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/holidays.json" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/ccday-label.sh"
 chmod +x "$INSTALL_DIR/ccday-joke-gen.sh"
+chmod +x "$INSTALL_DIR/ccday-billing.sh"
 echo "✅ 脚本已安装到 $INSTALL_DIR"
+
+# 1.1 探测 billing 插件是否可用（探测不到不算错误，只是不显示）
+if bash "$INSTALL_DIR/ccday-billing.sh" 2>/dev/null | grep -q .; then
+    echo "✅ 用量插件可用: $(bash "$INSTALL_DIR/ccday-billing.sh" 2>/dev/null | head -1)"
+else
+    echo "ℹ️  用量插件未启用（未探测到 token/接口，状态栏不显示 💰）"
+    echo "   诊断: bash $INSTALL_DIR/ccday-billing.sh --check"
+fi
 
 # 2. 安装 skill（目录结构：~/.claude/skills/ccday/skill.md）
 mkdir -p "$SKILLS_DIR/ccday"
@@ -79,10 +89,13 @@ CCDAY_LUNCH=12:00
 CCDAY_DINNER=18:00
 CCDAY_MEAL_WINDOW=30      # 到点后持续显示 N 分钟
 
-# 剩余金额显示
-CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
-CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
-CCDAY_BILLING_TTL=300     # 用量接口缓存秒数
+# 用量/余额插件（探测不到 token 或接口就自动不显示，无需手动关）
+CCDAY_BILLING=1           # 1=启用 💰 用量，0=关闭
+CCDAY_BILLING_BUDGET=0    # 每日预算（元），0=用接口返回的 daily_limit
+CCDAY_BILLING_FORMAT=auto # auto|percent|remain|used|balance|full
+CCDAY_BILLING_POOL=0      # 1=额外显示团队池占用 🏊
+CCDAY_BILLING_TTL=300     # 成功结果缓存秒数
+CCDAY_BILLING_FAIL_TTL=1800 # 请求失败后静默秒数，避免反复打不通的接口
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf（macOS 无需额外配置）"
     else
@@ -133,10 +146,13 @@ CCDAY_LUNCH=12:00
 CCDAY_DINNER=18:00
 CCDAY_MEAL_WINDOW=30      # 到点后持续显示 N 分钟
 
-# 剩余金额显示
-CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏
-CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
-CCDAY_BILLING_TTL=300     # 用量接口缓存秒数
+# 用量/余额插件（探测不到 token 或接口就自动不显示，无需手动关）
+CCDAY_BILLING=1           # 1=启用 💰 用量，0=关闭
+CCDAY_BILLING_BUDGET=0    # 每日预算（元），0=用接口返回的 daily_limit
+CCDAY_BILLING_FORMAT=auto # auto|percent|remain|used|balance|full
+CCDAY_BILLING_POOL=0      # 1=额外显示团队池占用 🏊
+CCDAY_BILLING_TTL=300     # 成功结果缓存秒数
+CCDAY_BILLING_FAIL_TTL=1800 # 请求失败后静默秒数，避免反复打不通的接口
 EOF
         echo "✅ 配置文件已创建: ~/.ccday.conf"
     fi
@@ -234,6 +250,6 @@ fi
 echo ""
 echo "状态栏效果:"
 echo "  ☁️ 16° 阴  🔨 劳动节·15天  🏖 2天  🕔 下班 3h45m·60%  🧘 站起来伸个懒腰!  💧 喝杯水!"
-echo "  📊 ctx 53%  │  🗺️ 目的地 22km·2天后  │  💰72%"
+echo "  📊 ctx 53%  │  🗺️ 目的地 22km·2天后  │  💰余214¥  │  📝3 ✓5"
 echo ""
 echo "更新方式: bash update.sh"

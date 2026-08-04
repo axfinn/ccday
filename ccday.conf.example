@@ -57,7 +57,20 @@ CCDAY_LUNCH=12:00         # 午饭提醒时间（默认 12:00，留空关闭）
 CCDAY_DINNER=18:00        # 晚饭提醒时间（默认 18:00，留空关闭）
 CCDAY_MEAL_WINDOW=30      # 到点后持续显示 N 分钟自动消失（默认 30）
 
-# ── 剩余金额显示 ──────────────────────────────────────────────────────────────
-CCDAY_BILLING=1           # 1=显示 💰 用量，0=隐藏（默认 1）
-CCDAY_BILLING_BUDGET=1000 # 每日预算（元），显示"💰余X.X¥"；设 0 则显示百分比
-CCDAY_BILLING_TTL=300     # 用量接口缓存秒数（默认 300，避免每次刷新都请求）
+# ── 用量/余额插件 ─────────────────────────────────────────────────────────────
+# 有即用，没有不用：token 和接口地址都探测不到时自动静默，不需要手动关。
+# token 探测顺序: CCDAY_BILLING_TOKEN → 环境变量 ANTHROPIC_AUTH_TOKEN /
+#   AICODING_API_KEY / ANTHROPIC_API_KEY → ~/.claude/settings.json 的 env 段 →
+#   ~/.claude/live-code.json
+# 接口地址默认取 $ANTHROPIC_BASE_URL + /v1/billing/usage
+# 诊断: bash ~/.claude/scripts/ccday/ccday-billing.sh --check
+CCDAY_BILLING=1             # 1=启用 💰 用量（默认），0=关闭
+# CCDAY_BILLING_TOKEN=      # 显式指定 token，留空自动探测
+# CCDAY_BILLING_API=        # 完整接口地址，留空按 ANTHROPIC_BASE_URL 推导
+CCDAY_BILLING_BUDGET=0      # 每日预算（元），0=用接口返回的 daily_limit
+CCDAY_BILLING_FORMAT=auto   # auto=💰余213¥ / percent=💰47% / used=💰用187¥
+                            # balance=💰余额973¥ / full=💰187/400¥·47%
+CCDAY_BILLING_POOL=0        # 1=额外显示团队池占用 🏊46%
+CCDAY_BILLING_TTL=300       # 成功结果缓存秒数（默认 300）
+CCDAY_BILLING_FAIL_TTL=1800 # 请求失败后静默秒数（默认 1800），避免反复打不通的接口
+# 用量达预算 75% 显示 🔥，90% 显示 🈵

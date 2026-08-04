@@ -1,6 +1,6 @@
 ---
 name: ccday
-description: ccday 状态栏插件向导 — 安装配置、下班倒计时、番茄钟、休息/喝水/饭点提醒、今日目标管理
+description: ccday 状态栏插件向导 — 安装配置、下班倒计时、番茄钟、休息/喝水/饭点提醒、今日目标管理、用量余额显示排查
 ---
 
 你是 ccday 的助手。ccday 是一个 Claude Code 状态栏插件，显示天气、节假日、周末倒计时、下班倒计时、番茄钟、休息提醒、喝水提醒、饭点提醒、Git状态、今日目标和出行灵感。
@@ -51,6 +51,33 @@ print('🧘 休息开始，好好放松')
 配置项：`CCDAY_LUNCH`（默认 12:00）、`CCDAY_DINNER`（默认 18:00）、`CCDAY_MEAL_WINDOW`（默认 30）。留空即关闭该餐。
 
 用户说"改成 12:30 吃午饭"、"晚饭提醒关掉"等，用下面的通用配置写入方法改 `~/.ccday.conf`。
+
+## 用量/余额显示（💰）
+
+独立插件 `~/.claude/scripts/ccday/ccday-billing.sh`，遵循"有即用，没有不用"：
+探测到 token 和接口就显示，探测不到就静默，不报错。
+
+**用户问"为什么不显示 💰"时，先跑诊断**：
+```bash
+bash ~/.claude/scripts/ccday/ccday-billing.sh --check
+```
+输出会说明 token 从哪来、请求的是哪个地址、接口原始响应是什么。按输出判断：
+- `未启用：token=未找到` → 让用户在 `~/.ccday.conf` 设 `CCDAY_BILLING_TOKEN`，或确认 `ANTHROPIC_AUTH_TOKEN` 已配置
+- `api=未找到` → 设 `CCDAY_BILLING_API` 完整接口地址，或配好 `ANTHROPIC_BASE_URL`
+- `请求失败` → 接口不通（内网/网关问题），插件会静默 30 分钟；改完配置后删掉负缓存
+  `rm -f ~/.ccday-billing-cache.json` 立即重试
+- `data 里没有可渲染的用量字段` → 接口返回结构不匹配，需要 `CCDAY_BILLING_API` 指向正确路径
+
+**改显示格式**：`CCDAY_BILLING_FORMAT` 取 `auto`（默认，💰余213¥）/ `percent`（💰47%）/
+`remain` / `used`（💰用187¥）/ `balance`（💰余额973¥）/ `full`（💰187/400¥·47%）。
+
+用户说"我想看百分比"→ 改成 `percent`；"看已经花了多少"→ `used`；"看总余额"→ `balance`；
+"两个都要看"→ `full`。改完提醒重启 Claude Code，或直接 `rm -f ~/.ccday-billing-cache.json` 刷新。
+
+**设每日预算**：`CCDAY_BILLING_BUDGET=200`（元）。设为 0 则用接口返回的 `daily_limit`。
+用量达预算 75% 图标变 🔥，90% 变 🈵。
+
+**关闭**：`CCDAY_BILLING=0`。**看团队池占用**：`CCDAY_BILLING_POOL=1`（追加 🏊46%）。
 
 ## 修改配置项
 
@@ -158,7 +185,7 @@ EOF
 
 ```
 第一行：天气  节假日倒计时  🏖周末倒计时  🕔下班倒计时  🍅番茄钟  🧘休息  💧喝水  🍚饭点  🎯今日目标  出行灵感
-第二行：📊ctx占用  🗺️旅行计划  💰每日用量  📝Git未提交  ✓今日提交  ⬇落后  ⬆领先
+第二行：📊ctx占用  🗺️旅行计划  💰每日用量/余额  📝Git未提交  ✓今日提交  ⬇落后  ⬆领先
 ```
 
 📊 ctx 按当前模型上下文窗口计算，1M 窗口模型会额外标注 `1M`（如 `📊 ctx 9% 1M`）。

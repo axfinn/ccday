@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.3
+# 版本: v0.6.4
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -720,44 +720,12 @@ if days_left or not tdate:
     [ -n "$TRIP" ] && LINE2="${TRIP}"
 fi
 
-# ── Billing（bilibili 内网，带缓存）────────────────────
-# 状态栏每次刷新都打内网接口太浪费，缓存 CCDAY_BILLING_TTL 秒（默认 300）
-TOKEN="${ANTHROPIC_AUTH_TOKEN:-}"
-if [ -n "$TOKEN" ] && [ "${CCDAY_BILLING:-1}" = "1" ]; then
-    BILLING_CACHE="$HOME/.ccday-billing-cache.json"
-    BILLING_TTL="${CCDAY_BILLING_TTL:-300}"
-    BILLING=$(/usr/bin/python3 -c '
-import sys, json, os, time
-cache, ttl = sys.argv[1], int(sys.argv[2])
-try:
-    with open(cache) as f:
-        d = json.load(f)
-    if time.time() - d.get("ts", 0) < ttl:
-        print(d.get("text", ""))
-except Exception:
-    pass
-' "$BILLING_CACHE" "$BILLING_TTL" 2>/dev/null)
-
-    if [ -z "$BILLING" ]; then
-        BILLING=$(curl -s --max-time 3 "http://api-ai-coding.bilibili.co/api/v1/billing/usage" \
-          -H "Authorization: Bearer $TOKEN" 2>/dev/null | /usr/bin/python3 -c '
-import sys, json, time
-cache, budget_raw = sys.argv[1], sys.argv[2]
-try:
-    d = json.load(sys.stdin).get("data", {})
-    budget = float(budget_raw or 0)
-    if budget > 0:
-        remain = budget - d.get("daily_used", 0)
-        text = "💰余{:.1f}¥".format(remain)
-    else:
-        text = "💰{:.0f}%".format(d.get("daily_percent", 0))
-    print(text)
-    with open(cache, "w") as f:
-        json.dump({"ts": time.time(), "text": text}, f)
-except Exception:
-    pass
-' "$BILLING_CACHE" "${CCDAY_BILLING_BUDGET:-0}" 2>/dev/null)
-    fi
+# ── Billing 插件（有即用，没有不用）────────────────────
+# 拆到独立脚本：token/接口探测不到就静默，装了这份脚本的非 bilibili 用户不会看到报错。
+# 缓存与降级逻辑都在插件内部，这里只负责拼接。
+BILLING_PLUGIN="$(dirname "$0")/ccday-billing.sh"
+if [ -f "$BILLING_PLUGIN" ]; then
+    BILLING=$(bash "$BILLING_PLUGIN" 2>/dev/null | head -1)
     [ -n "$BILLING" ] && LINE2="${LINE2:+${LINE2} │ }${BILLING}"
 fi
 
