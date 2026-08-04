@@ -69,13 +69,14 @@ CCDAY_AI_JOKE=1
 CCDAY_TIP_ROTATE=5
 CCDAY_AI_JOKE_ROTATE=20
 
-# 下班倒计时（弹性工作制：打卡窗口内首次开屏记为上班，下班=上班+工时）
+# 下班倒计时（弹性工作制：打卡窗口内首次用户活动记为上班，下班=上班+工时）
+# macOS 用 pmset -g log 取真实首次活动；其他平台用状态栏首次刷新时刻
 CCDAY_OFFWORK=1           # 1=显示下班倒计时，0=隐藏
-CCDAY_WORK_PUNCH=1        # 1=按首次开屏打卡（默认），0=用固定 WORK_START/END
-CCDAY_WORK_HOURS=9.5      # 打卡模式工时（默认 9.5）
+CCDAY_WORK_PUNCH=1        # 1=按首次用户活动打卡（默认），0=用固定 WORK_START/END
+CCDAY_WORK_HOURS=9        # 打卡模式工时（默认 9 小时）
 CCDAY_PUNCH_START=06:00   # 打卡有效窗口开始
 CCDAY_PUNCH_END=12:00     # 打卡有效窗口结束
-CCDAY_PUNCH_SHOW=1        # 1=倒计时带上 (10:12→19:42)
+CCDAY_PUNCH_SHOW=1        # 1=倒计时带上 (10:22→19:22)
 
 # 固定上下班时间（PUNCH=0 或当天未打卡时生效，支持跨天班）
 CCDAY_WORK_START=10:00
@@ -133,13 +134,14 @@ CCDAY_AI_JOKE=1           # 启用 AI 生成段子
 CCDAY_TIP_ROTATE=5        # 每 N 次会话随机换一条 tip
 CCDAY_AI_JOKE_ROTATE=20   # 每 N 次会话用 AI 生成新段子
 
-# 下班倒计时（弹性工作制：打卡窗口内首次开屏记为上班，下班=上班+工时）
+# 下班倒计时（弹性工作制：打卡窗口内首次用户活动记为上班，下班=上班+工时）
+# macOS 用 pmset -g log 取真实首次活动；其他平台用状态栏首次刷新时刻
 CCDAY_OFFWORK=1           # 1=显示下班倒计时，0=隐藏
-CCDAY_WORK_PUNCH=1        # 1=按首次开屏打卡（默认），0=用固定 WORK_START/END
-CCDAY_WORK_HOURS=9.5      # 打卡模式工时（默认 9.5）
+CCDAY_WORK_PUNCH=1        # 1=按首次用户活动打卡（默认），0=用固定 WORK_START/END
+CCDAY_WORK_HOURS=9        # 打卡模式工时（默认 9 小时）
 CCDAY_PUNCH_START=06:00   # 打卡有效窗口开始
 CCDAY_PUNCH_END=12:00     # 打卡有效窗口结束
-CCDAY_PUNCH_SHOW=1        # 1=倒计时带上 (10:12→19:42)
+CCDAY_PUNCH_SHOW=1        # 1=倒计时带上 (10:22→19:22)
 
 # 固定上下班时间（PUNCH=0 或当天未打卡时生效，支持跨天班）
 CCDAY_WORK_START=10:00

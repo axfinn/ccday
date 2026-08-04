@@ -55,12 +55,23 @@ print('🧘 休息开始，好好放松')
 ## 上班打卡 / 下班倒计时（🕔）
 
 默认弹性工作制：早上 `CCDAY_PUNCH_START`–`CCDAY_PUNCH_END`（默认 06:00–12:00）之间
-第一次刷新状态栏的时刻记为上班时间，下班点 = 上班 + `CCDAY_WORK_HOURS`（默认 9.5h）。
-记录在 `~/.ccday-punch.json`，只对当天有效。
+第一次**用户活动**记为上班时间，下班点 = 上班 + `CCDAY_WORK_HOURS`（默认 9h）。
+
+上班时间来源：macOS 读 `pmset -g log` 里当天真实的首次用户活动（显示器点亮 /
+`Created UserIsActive` / HID 活动，排除后台进程断言和 DarkWake）；其他平台或
+`pmset` 取不到时，退回状态栏在窗口内的首次刷新时刻。记录在 `~/.ccday-punch.json`，
+只对当天有效，`source` 字段标明是 `pmset` 还是 `refresh`。
 
 **查看今天的打卡**：
 ```bash
 cat ~/.ccday-punch.json 2>/dev/null || echo "今天还没打卡（或已退回固定 WORK_START/END）"
+```
+
+**在 macOS 上核对首次活动时间**（用户质疑打卡记错时用）：
+```bash
+pmset -g log | grep "$(date +%Y-%m-%d)" \
+  | grep -E "Display is turned on|Created UserIsActive|HID Activity" \
+  | grep -v DarkWake | head -5
 ```
 
 **改打卡时间**（用户说"我其实 9 点就来了"、"打卡记错了"）：

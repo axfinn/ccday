@@ -9,7 +9,7 @@
 #   CCDAY_WORK_START    上班时间，默认 10:00（未打卡时的兜底）
 #   CCDAY_WORK_END      下班时间，默认 19:30（未打卡时的兜底）
 #   CCDAY_WORK_PUNCH    1=按首次开屏时间打卡（默认），下班=上班+CCDAY_WORK_HOURS
-#   CCDAY_WORK_HOURS    打卡模式工时，默认 9.5
+#   CCDAY_WORK_HOURS    打卡模式工时，默认 9
 #   CCDAY_GOAL          今日目标，如 "完成登录模块"
 #   TRIP_*              旅行计划（可选）
 
@@ -39,7 +39,7 @@ CCDAY_WORK_START="${CCDAY_WORK_START:-10:00}"
 CCDAY_WORK_END="${CCDAY_WORK_END:-19:30}"
 CCDAY_OFFWORK="${CCDAY_OFFWORK:-1}"               # 1=显示下班倒计时，0=隐藏
 CCDAY_WORK_PUNCH="${CCDAY_WORK_PUNCH:-1}"         # 1=按首次开屏时间打卡，0=用固定 WORK_START
-CCDAY_WORK_HOURS="${CCDAY_WORK_HOURS:-9.5}"       # 打卡模式下的工时，下班=上班+此值
+CCDAY_WORK_HOURS="${CCDAY_WORK_HOURS:-9}"         # 打卡模式下的工时，下班=上班+此值
 CCDAY_PUNCH_START="${CCDAY_PUNCH_START:-06:00}"   # 打卡有效窗口开始
 CCDAY_PUNCH_END="${CCDAY_PUNCH_END:-12:00}"       # 打卡有效窗口结束
 CCDAY_PUNCH_SHOW="${CCDAY_PUNCH_SHOW:-1}"         # 1=下班倒计时带上 (上班→下班) 时间
@@ -331,10 +331,16 @@ def fmt_span(seconds):
         return f"{mins // 60}h{mins % 60:02d}m"
     return f"{mins}m"
 
-# ── 上班打卡（首次开屏时间）────────────────────────────
-# 弹性工作制：CCDAY_PUNCH_START–CCDAY_PUNCH_END（默认 06:00–12:00）之间的第一次
-# 状态栏刷新记为上班时间，下班点 = 上班 + CCDAY_WORK_HOURS。晚到晚走，不再按死的 10:00 算。
-# 首次开屏晚于窗口（下午才开电脑）或非工作日 → 退回固定的 CCDAY_WORK_START/END。
+# ── 上班打卡（当天第一次真实用户活动）──────────────────
+# 弹性工作制：CCDAY_PUNCH_START–CCDAY_PUNCH_END（默认 06:00–12:00）内的首次用户活动
+# 记为上班时间，下班点 = 上班 + CCDAY_WORK_HOURS。晚到晚走，不再按死的 10:00 算。
+#
+# 上班时间怎么取（按优先级）：
+#   1. macOS: pmset -g log 里当天窗口内第一次真实用户活动（显示器点亮 / UserIsActive
+#      断言 / HID 活动）。比"状态栏首次刷新"准——早上先开邮件、晚点才开 Claude Code
+#      也不会把上班时间记晚
+#   2. 其他平台或 pmset 取不到: 退回状态栏在窗口内的首次刷新时刻
+# 首次活动晚于窗口（下午才开电脑）或非工作日 → 退回固定的 CCDAY_WORK_START/END。
 PUNCH_FILE = os.path.expanduser("~/.ccday-punch.json")
 
 
@@ -353,13 +359,48 @@ def load_punch():
         return None
 
 
-def save_punch(dt):
+def save_punch(dt, source):
     try:
         with open(PUNCH_FILE, "w") as f:
             json.dump({"date": today_str, "ts": dt.timestamp(),
-                       "time": dt.strftime("%H:%M")}, f)
+                       "time": dt.strftime("%H:%M"), "source": source}, f)
     except Exception:
         pass
+
+
+def detect_mac_punch(win_start, win_end, now_p):
+    """macOS: 从 pmset -g log 找当天窗口内第一次真实用户活动。
+
+    只认"人真的在操作"的信号：显示器点亮、UserIsActive 断言、HID 活动。
+    后台进程（cloudd / coreaudiod / runningboardd 之类）的电源断言和 DarkWake
+    都不算——机器自己醒来收邮件不等于人到了。
+    """
+    if platform.system() != "Darwin":
+        return None
+    try:
+        out = subprocess.run(["pmset", "-g", "log"], capture_output=True,
+                             text=True, timeout=4).stdout
+    except Exception:
+        return None
+
+    markers = ("Display is turned on", "Created UserIsActive", "HID Activity")
+    best = None
+    for line in out.splitlines():
+        # pmset 每行以 "2026-08-04 10:22:55 +0800 ..." 开头
+        if not line.startswith(today_str):
+            continue
+        if "DarkWake" in line:
+            continue          # 后台维护唤醒，屏幕没亮，人不在
+        if not any(m in line for m in markers):
+            continue
+        try:
+            ts = _dt.datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            continue
+        # 不能晚于当前时间（日志时区异常时的兜底），也必须落在打卡窗口内
+        if win_start <= ts <= min(now_p, win_end) and (best is None or ts < best):
+            best = ts
+    return best
 
 
 def resolve_punch():
@@ -378,10 +419,19 @@ def resolve_punch():
     ps_h, ps_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_START", "06:00"), 6, 0)
     pe_h, pe_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_END", "12:00"), 12, 0)
     now_p = _dt.datetime.now()
-    if _dt.time(ps_h, ps_m) <= now_p.time() <= _dt.time(pe_h, pe_m):
-        save_punch(now_p)
-        return now_p
-    return None
+    win_start = now_p.replace(hour=ps_h, minute=ps_m, second=0, microsecond=0)
+    win_end   = now_p.replace(hour=pe_h, minute=pe_m, second=59, microsecond=0)
+    if not (win_start <= now_p <= win_end):
+        return None
+
+    # pmset 只在"今天还没记录"时调用一次，之后都读缓存，不会每次刷新都拉日志
+    detected = detect_mac_punch(win_start, win_end, now_p)
+    if detected:
+        save_punch(detected, "pmset")
+        return detected
+
+    save_punch(now_p, "refresh")
+    return now_p
 
 
 def resolve_worktime():
@@ -390,9 +440,9 @@ def resolve_worktime():
     punch = resolve_punch()
     if punch:
         try:
-            hours = float(os.environ.get("CCDAY_WORK_HOURS", "9.5"))
+            hours = float(os.environ.get("CCDAY_WORK_HOURS", "9"))
         except ValueError:
-            hours = 9.5
+            hours = 9.0
         return punch, punch + _dt.timedelta(hours=hours), True
 
     ws_h, ws_m = parse_hhmm(os.environ.get("CCDAY_WORK_START", "10:00"), 10, 0)
