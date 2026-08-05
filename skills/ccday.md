@@ -58,9 +58,15 @@ print('🧘 休息开始，好好放松')
 第一次**用户活动**记为上班时间，下班点 = 上班 + `CCDAY_WORK_HOURS`（默认 9h）。
 
 上班时间来源：macOS 读 `pmset -g log` 里当天真实的首次用户活动（显示器点亮 /
-`Created UserIsActive` / HID 活动，排除后台进程断言和 DarkWake）；其他平台或
-`pmset` 取不到时，退回状态栏在窗口内的首次刷新时刻。记录在 `~/.ccday-punch.json`，
-只对当天有效，`source` 字段标明是 `pmset` 还是 `refresh`。
+`Created UserIsActive` / HID 活动，排除后台进程断言和 DarkWake）；查不到时看 `ioreg` 的键鼠
+空闲时间，只有人此刻真在操作才打卡；非 macOS 才退回状态栏首次刷新时刻。
+
+记录在 `~/.ccday-punch.json`，只对当天有效。`source` 字段：`pmset`=权威值（不再改）、
+`hid`=键鼠显示人在时取的时间（仍可被 pmset 纠正）、`refresh`=非 macOS 首刷兜底、
+`idle`=确认还没人动过机器（未打卡）、`closed`=窗口已关就地冻结。
+
+**注意**：状态栏刷新不等于人在——机器整夜空转时状态栏也会刷。用户反馈"上班时间不对"且记录里
+是很早的时间（如 06:00）时，先跑下面的 `pmset` 核对命令看真实首次活动是几点。
 
 **查看今天的打卡**：
 ```bash
@@ -83,7 +89,8 @@ d = datetime.date.today()
 h, m = map(int, t.split(':'))
 dt = datetime.datetime.combine(d, datetime.time(h, m))
 with open('$HOME/.ccday-punch.json', 'w') as f:
-    json.dump({'date': str(d), 'ts': dt.timestamp(), 'time': t}, f)
+    # source 必须写 pmset：手改的值是权威的，否则下次刷新会被自动探测覆盖掉
+    json.dump({'date': str(d), 'ts': dt.timestamp(), 'time': t, 'source': 'pmset'}, f)
 print(f'✅ 上班时间已改为 {t}')
 "
 ```
@@ -92,7 +99,8 @@ print(f'✅ 上班时间已改为 {t}')
 ```bash
 rm -f ~/.ccday-punch.json
 ```
-清掉后下次状态栏刷新时，若仍在打卡窗口内会记为当前时刻；已过窗口则退回固定 `CCDAY_WORK_START`。
+清掉后下次状态栏刷新时优先查 `pmset` 的真实首次活动；查不到且人此刻在操作则记为当前时刻；
+已过打卡窗口则退回固定 `CCDAY_WORK_START`。
 
 **用户说"不想按开屏算，就用固定 10 点上班"** → 用下面的通用配置方法设 `CCDAY_WORK_PUNCH=0`。
 **用户说"工时改成 8 小时"** → 设 `CCDAY_WORK_HOURS=8`。

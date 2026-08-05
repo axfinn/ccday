@@ -1,7 +1,7 @@
 #!/bin/bash
 # ccday-label.sh — 天气 + 节假日 + 周末 + 下班倒计时 + 番茄钟 + 休息/喝水/饭点提醒 + Git + 目标 + 旅行计划 + 上下文
 # 项目: https://github.com/axfinn/ccday
-# 版本: v0.6.6
+# 版本: v0.6.7
 #
 # 配置项（~/.ccday.conf）:
 #   QWEATHER_*          和风天气 API（可选，不填用 open-meteo）
@@ -381,13 +381,25 @@ def fmt_span(seconds):
 #   1. macOS: pmset -g log 里当天窗口内第一次真实用户活动（显示器点亮 / UserIsActive
 #      断言 / HID 活动）。比"状态栏首次刷新"准——早上先开邮件、晚点才开 Claude Code
 #      也不会把上班时间记晚
-#   2. 其他平台或 pmset 取不到: 退回状态栏在窗口内的首次刷新时刻
+#   2. macOS 但 pmset 一条活动都查不到: 只有 HID 空闲时间显示人此刻真在操作
+#      （PUNCH_IDLE_MAX 秒内动过键鼠）才拿当前时间打卡
+#   3. 其他平台: 退回状态栏在窗口内的首次刷新时刻
+# 关键前提：状态栏刷新不等于人在。机器整夜没关、挂着会话空转时状态栏照样会刷，
+# 那一刷不能当上班时间（会把上班记成 06:00），所以 pmset / 键鼠都说人不在时宁可
+# 不打卡。兜底值也只是暂定，之后每次刷新都再给 pmset 一次纠正机会。
 # 首次活动晚于窗口（下午才开电脑）或非工作日 → 退回固定的 CCDAY_WORK_START/END。
 PUNCH_FILE = os.path.expanduser("~/.ccday-punch.json")
+PUNCH_PROBE_GAP = 300    # pmset 空结果的复查间隔（秒）：拉日志约 0.7s，不能每次刷新都做
+PUNCH_IDLE_MAX  = 120    # 键鼠空闲不超过这么多秒，才认为人此刻真的在机器前
 
 
 def load_punch():
-    """今天已记录的上班 datetime，没有返回 None"""
+    """今天的打卡记录 dict，没有/隔夜返回 None
+
+    source 取值：pmset=日志里的真实首次活动（权威，认定后不改）；hid=pmset 查不到
+    但键鼠显示人在，取当时时间；refresh=没有空闲信号可用时的状态栏首刷兜底；
+    idle=窗口内确认还没人动过机器；closed=窗口已关，就地冻结不再重试。
+    """
     try:
         with open(PUNCH_FILE) as f:
             d = json.load(f)
@@ -395,19 +407,49 @@ def load_punch():
         return None
     if d.get("date") != today_str:
         return None      # 隔夜挂着不关机也不会沿用昨天的打卡
+    return d
+
+
+def punch_dt(rec):
+    """记录里的上班 datetime，没打上卡（idle/closed）返回 None"""
     try:
-        return _dt.datetime.fromtimestamp(float(d["ts"]))
+        return _dt.datetime.fromtimestamp(float(rec["ts"]))
     except Exception:
         return None
 
 
-def save_punch(dt, source):
+def save_punch(dt, source, probe=None):
+    rec = {"date": today_str, "source": source}
+    if dt is not None:
+        rec["ts"] = dt.timestamp()
+        rec["time"] = dt.strftime("%H:%M")
+    if probe:
+        rec["probe"] = probe      # 上次问过 pmset 的时刻，用来节流
     try:
         with open(PUNCH_FILE, "w") as f:
-            json.dump({"date": today_str, "ts": dt.timestamp(),
-                       "time": dt.strftime("%H:%M"), "source": source}, f)
+            json.dump(rec, f)
     except Exception:
         pass
+
+
+def hid_idle_seconds():
+    """macOS: 距上次键鼠活动的秒数，取不到返回 None（约 6ms，每次刷新都调也没事）"""
+    if platform.system() != "Darwin":
+        return None
+    try:
+        # HIDIdleTime 挂在 IOHIDSystem 下三层，-d 4 才够深（-d 1 什么都取不到）
+        out = subprocess.run(["ioreg", "-c", "IOHIDSystem", "-d", "4", "-w", "0"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        if "HIDIdleTime" not in line:
+            continue
+        try:
+            return int(line.split("=")[-1].strip().strip('"')) / 1e9   # 纳秒
+        except Exception:
+            return None
+    return None
 
 
 def detect_mac_punch(win_start, win_end, now_p):
@@ -454,9 +496,9 @@ def resolve_punch():
     if cfg_e <= cfg_s:
         return None      # 跨天班（22:00→06:00）：早上开屏是在下班，不是上班
 
-    got = load_punch()
-    if got:
-        return got
+    rec = load_punch()
+    if rec and rec.get("source") in ("pmset", "closed"):
+        return punch_dt(rec)     # 权威值/已冻结，不再查
 
     ps_h, ps_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_START", "06:00"), 6, 0)
     pe_h, pe_m = parse_hhmm(os.environ.get("CCDAY_PUNCH_END", "12:00"), 12, 0)
@@ -467,19 +509,41 @@ def resolve_punch():
         return None      # 窗口还没开始，今天的班还没上
 
     # pmset 读的是历史日志，过了窗口照样能查到早上的首次活动——所以先试它。
-    # 只在"今天还没记录"时调用一次，之后都读缓存，不会每次刷新都拉日志。
-    detected = detect_mac_punch(win_start, win_end, now_p)
-    if detected:
-        save_punch(detected, "pmset")
-        return detected
+    # 上一轮没查到时按 PUNCH_PROBE_GAP 节流复查：早上 6 点空转时日志里还没有活动，
+    # 人 10 点到了才有，一次查不到就永久放弃会把上班时间永远钉在兜底值上。
+    prev_probe = float(rec.get("probe") or 0) if rec else 0
+    if not rec or now_p.timestamp() - prev_probe >= PUNCH_PROBE_GAP:
+        detected = detect_mac_punch(win_start, win_end, now_p)
+        if detected:
+            save_punch(detected, "pmset")
+            return detected
+        probe_at = now_p.timestamp()
+    else:
+        probe_at = prev_probe     # 还在节流期内，沿用上次的探测时刻
 
-    # refresh 兜底只有"现在还在窗口内"才成立：下午 6 点第一次刷新状态栏，
-    # 不能把此刻当成上班时间，那种情况退回固定的 WORK_START/END
+    # 窗口已关且 pmset 交白卷：此刻不能当上班时间。有暂定值就地冻结（早上确实在，
+    # 只是 pmset 没留痕），没有就退回固定 WORK_START/END
     if now_p > win_end:
+        pending = punch_dt(rec) if rec else None
+        save_punch(pending, "closed")
+        return pending
+
+    idle = hid_idle_seconds()
+    if idle is not None:
+        # macOS 有键鼠信号可用：人此刻在动才打卡，空闲就等着，别把空转的刷新记成上班
+        if idle <= PUNCH_IDLE_MAX:
+            prior = punch_dt(rec) if rec else None
+            stamp = prior if (prior and rec.get("source") == "hid") else now_p
+            save_punch(stamp, "hid", probe=probe_at)
+            return stamp
+        save_punch(None, "idle", probe=probe_at)
         return None
 
-    save_punch(now_p, "refresh")
-    return now_p
+    # 非 macOS：没有空闲信号，只能沿用首次刷新时刻，且首刷之后不再前移
+    prior = punch_dt(rec) if rec else None
+    stamp = prior or now_p
+    save_punch(stamp, "refresh", probe=probe_at)
+    return stamp
 
 
 def resolve_worktime():
